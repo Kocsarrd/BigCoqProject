@@ -122,7 +122,7 @@ Inductive big_step : expr -> heap -> res -> heap -> Prop :=
   | Pair_big_step_ex_r h1 h2 h3 e1 e2 v1 v2 :
       big_step e1 h1 (ok v1) h2 ->
       big_step e2 h2 (ex v2) h3 ->
-      big_step (EPair e1 e2) h1 (ex v2) h3 
+      big_step (EPair e1 e2) h1 (ex v2) h3
   | Fst_big_step h1 h2 e v1 v2 :
       big_step e h1 (ok (VPair v1 v2)) h2 ->
       big_step (EFst e) h1 (ok v1) h2
@@ -221,33 +221,28 @@ Ltac inv_big :=
   end.
 
 Inductive ctx : (expr -> expr) -> Prop :=
-  | App_l_ctx e : ctx (fun x => EApp x e)
-  | App_r_ctx v : ctx (EApp (EVal v))
-  | Op_l_ctx op e : ctx (fun x => EOp op x e)
-  | Op_r_ctx op v : ctx (EOp op (EVal v))
-  | Pair_l_ctx e : ctx (fun x => EPair x e)
-  | Pair_r_ctx v : ctx (EPair (EVal v))
+  | App_l_ctx e2 : ctx (fun x => EApp x e2)
+  | App_r_ctx v1 : ctx (EApp (EVal v1))
+  | Op_l_ctx op e2 : ctx (fun x => EOp op x e2)
+  | Op_r_ctx op v1 : ctx (EOp op (EVal v1))
+  | Pair_l_ctx e2 : ctx (fun x => EPair x e2)
+  | Pair_r_ctx v1 : ctx (EPair (EVal v1))
   | Fst_ctx : ctx EFst
   | Snd_ctx : ctx ESnd
   | If_ctx e2 e3 : ctx (fun x => EIf x e2 e3)
-  | Seq_ctx e : ctx (fun x => ESeq x e)
+  | Seq_ctx e2 : ctx (fun x => ESeq x e2)
   | Alloc_ctx : ctx EAlloc
   | Load_ctx : ctx ELoad
-  | Store_ctx_l e : ctx (fun x => EStore x e)
-  | Store_ctx_r v : ctx (EStore (EVal v))
+  | Store_ctx_l e2 : ctx (fun x => EStore x e2)
+  | Store_ctx_r v1 : ctx (EStore (EVal v1))
   | Free_ctx : ctx EFree
   | Id_ctx : ctx (fun x => x)
   | Compose_ctx k1 k2 : ctx k1 -> ctx k2 -> ctx (fun x => k1 (k2 x)).
 
 Notation sepProp := (sepProp val).
 
-Definition post (Phi : val -> sepProp) (EPhi : val -> sepProp) (r : res) :=
-  match r with
-  | ok v => Phi v
-  | ex v => EPhi v
-  end.
-
-Notation "P # Q" := (post P Q) (at level 10, no associativity).
+Notation "P # Q" := (res_rect (fun _ => sepProp) P Q)
+  (at level 10, no associativity).
 
 Definition wp (e : expr) (Phi EPhi : val -> sepProp) : sepProp := fun h =>
   forall hf, disjoint h hf ->
@@ -256,11 +251,95 @@ Definition wp (e : expr) (Phi EPhi : val -> sepProp) : sepProp := fun h =>
       big_step e (union h hf) r (union h' hf) /\
       (Phi # EPhi) r h'.
 
+Lemma big_step_ctx_ok k e v3 h1 h3 :
+  ctx k ->
+  big_step (k e) h1 (ok v3) h3 <->
+    exists v2 h2,
+      big_step e h1 (ok v2) h2 /\
+      big_step (k (EVal v2)) h2 (ok v3) h3.
+Proof.
+  intros Hk; revert e v3 h1 h3; induction Hk; intros e v3 h1 h3;
+    (split; [intros H3 | intros (v2 & h2 & H1 & H2)]);
+    inv_big; eauto using big_step.
+  - apply IHHk1 in H3 as (v2' & h2' & H2 & H3).
+    apply IHHk2 in H2 as (v2 & h2 & H1 & H2).
+    do 2 eexists; split; [done |]. apply IHHk1. eauto.
+  - apply IHHk1. apply IHHk1 in H2 as (v2' & h2' & H2 & H3).
+    do 2 eexists; split; [| done]. apply IHHk2. eauto.
+Qed.
+
+Lemma big_step_ctx_ex k e v3 h1 h3 :
+  ctx k ->
+  big_step (k e) h1 (ex v3) h3 <->
+    big_step e h1 (ex v3) h3 \/
+    exists v2 h2,
+      big_step e h1 (ok v2) h2 /\
+      big_step (k (EVal v2)) h2 (ex v3) h3.
+Proof.
+  intros Hk; revert e v3 h1 h3; induction Hk; intros e v3 h1 h3;
+    (split; [intros H3 | intros [H | (v2 & h2 & H1 & H2)]]);
+    inv_big; eauto 6 using big_step.
+  - apply IHHk1 in H3 as [H2 | (v2' & h2' & H2 & H3)].
+    + apply IHHk2 in H2 as [H1 | (v2 & h2 & H1 & H2)]; [by left |].
+      right; do 2 eexists; split; [done |]. apply IHHk1. by left.
+    + apply big_step_ctx_ok in H2 as (v2 & h2 & H1 & H2); [| done].
+      right; do 2 eexists; split; [done |]. apply IHHk1. eauto.
+  - apply IHHk1. left. apply IHHk2. by left.
+  - apply IHHk1. apply IHHk1 in H2 as [H2 | (v2' & h2' & H2 & H3)].
+    + left. apply IHHk2. eauto.
+    + right; do 2 eexists; split; [| done]. apply big_step_ctx_ok; eauto.
+Qed.
+
+Lemma wp_ctx k Phi EPhi e :
+  ctx k ->
+  wp e (fun vret => wp (k (EVal vret)) Phi EPhi) EPhi |~ wp (k e) Phi EPhi.
+Proof.
+  intros Hk h1 He hf Hdisj1.
+  edestruct He as (r2 & h2 & Hdisj2 & Hbig2 & Hr2); [done |].
+  destruct r2 as [v2 | v2]; simpl in Hr2.
+  - edestruct Hr2 as (r3 & h3 & Hdisj3 & Hbig3 & Hr3); [done |].
+    exists r3, h3; repeat split; [done | | done].
+    destruct r3 as [v3 | v3].
+    + apply big_step_ctx_ok; eauto.
+    + apply big_step_ctx_ex; eauto.
+  - exists (ex v2), h2; repeat split; [done | | done].
+    apply big_step_ctx_ex; eauto.
+Qed.
+
+Global Hint Extern 0 (disjoint _ _) =>
+  apply disjoint_comm; assumption : core.
+
+Lemma wp_frame Phi EPhi e R :
+  wp e Phi EPhi ** R |~ wp e (fun v => Phi v ** R) (fun v => EPhi v ** R).
+Proof.
+  intros h (h1 & h2 & -> & Hdisj & He & HR) hf Hdisj'.
+  apply disjoint_union in Hdisj' as [??].
+  destruct (He (union h2 hf)) as (r & h1' & Hdisj1 & Hbig1 & Hr).
+  { by apply disjoint_comm, disjoint_union. }
+  apply disjoint_comm, disjoint_union in Hdisj1 as [??].
+  exists r, (union h1' h2); repeat split.
+  { by apply disjoint_union. }
+  { by rewrite <-!union_assoc. }
+  destruct r as [v | v]; simpl in *; by exists h1', h2.
+Qed.
+
+Lemma wp_mono Phi Psi EPhi EPsi e :
+  (forall v, Phi v |~ Psi v) ->
+  (forall v, EPhi v |~ EPsi v) ->
+  wp e Phi EPhi |~ wp e Psi EPsi.
+Proof.
+  intros H1 H2 h He hf Hdisj.
+  edestruct He as (r & h' & Hdisj' & Hbig & Hr); [done |].
+  exists r, h'; repeat split; [done .. |].
+  destruct r as [v | v]; simpl in *; [by apply H1 | by apply H2].
+Qed.
+
 Lemma Val_wp Phi EPhi v : Phi v |~ wp (EVal v) Phi EPhi.
 Proof.
 intros h HPhi hf Hdisj. eauto using big_step.
 Qed.
 
+(*
 Lemma wp_frame Phi EPhi R e :
   wp e Phi EPhi ** R |~ wp e (fun vret => Phi vret ** R) 
                              (fun vret => EPhi vret ** R).
@@ -276,7 +355,7 @@ split.
 { by do 2 rewrite <- union_assoc. }
 destruct vret as [?|?];simpl in *; unfold "**";eauto 6.
 Qed.
-
+*)
 Lemma Op_wp Phi EPhi op v1 v2 v :
   eval_bin_op op v1 v2 = Some v ->
   Phi v |~ wp (EOp op (EVal v1) (EVal v2)) Phi EPhi.
@@ -285,17 +364,6 @@ intros Hop h HPhi hf Hdisj.
 eauto 6 using big_step.
 Qed.
 
-Lemma wp_mono Phi EPhi Psi EPsi e :
-  (forall vret, Phi vret |~ Psi vret) ->
-  (forall vret, EPhi vret |~ EPsi vret) ->
-  wp e Phi EPhi |~ wp e Psi EPsi.
-Proof.
-intros HPhi HEPhi h Hwp hf Hdisj.
-edestruct Hwp as (vret & h' & Hdisj' & Hbs & HPost);[done|].
-destruct vret as [?|?]; repeat eexists;eauto;simpl.
-+ by apply HPhi.
-+ by apply HEPhi.
-Qed.
 
 Lemma Seq_wp Phi EPhi v e :
   wp (EVal v) (fun _ => wp e Phi EPhi) EPhi |~ wp (ESeq (EVal v) e) Phi EPhi.
