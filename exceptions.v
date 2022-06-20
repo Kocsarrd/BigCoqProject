@@ -1,6 +1,11 @@
 From pv Require Export week8.
 Import NatMap.
 
+Section sanyi.
+
+Context (tag : Type).
+Context (tag_dec : forall x y : tag, {x = y} + {x <> y}).
+
 Inductive bin_op :=
   | PlusOp
   | MinusOp
@@ -24,8 +29,8 @@ Inductive expr :=
   | ELoad : expr -> expr
   | EStore : expr -> expr -> expr
   | EFree : expr -> expr
-  | EThrow : expr -> expr
-  | ECatch : expr -> expr -> expr
+  | EThrow : tag -> expr -> expr
+  | ECatch : expr -> tag -> expr -> expr
 with val :=
   | VClosure : string -> expr -> val
   | VRecClosure : string -> string -> expr -> val
@@ -54,8 +59,8 @@ Fixpoint subst (x : string) (w : val) (e : expr) : expr :=
   | EStore e1 e2 => EStore (subst x w e1) (subst x w e2)
   | ELoad e => ELoad (subst x w e)
   | EFree e => EFree (subst x w e)
-  | EThrow e => EThrow (subst x w e)
-  | ECatch e1 e2 => ECatch (subst x w e1) (subst x w e2)
+  | EThrow t e => EThrow t (subst x w e)
+  | ECatch e1 t e2 => ECatch (subst x w e1) t (subst x w e2)
   end.
 
 Definition eval_bin_op (op : bin_op) (v1 v2 : val) : option val :=
@@ -74,7 +79,7 @@ Notation heap := (natmap val).
 
 Inductive res :=
   | ok : val -> res
-  | ex : val -> res.
+  | ex : tag -> val -> res.
 
 Inductive big_step : expr -> heap -> res -> heap -> Prop :=
   | Val_big_step h v :
@@ -93,48 +98,48 @@ Inductive big_step : expr -> heap -> res -> heap -> Prop :=
       big_step e2 h2 (ok v2) h3 ->
       big_step (subst y v2 (subst f (VRecClosure f y e1') e1')) h3 r h4 ->
       big_step (EApp e1 e2) h1 r h4
-  | App_big_step_ex_l h1 h2 e1 e2 v1 :
-      big_step e1 h1 (ex v1) h2 ->
-      big_step (EApp e1 e2) h1 (ex v1) h2
-  | App_big_step_ex_r h1 h2 h3 e1 e2 v1 v2 :
+  | App_big_step_ex_l h1 h2 e1 e2 t v1 :
+      big_step e1 h1 (ex t v1) h2 ->
+      big_step (EApp e1 e2) h1 (ex t v1) h2
+  | App_big_step_ex_r h1 h2 h3 e1 e2 t v1 v2 :
       big_step e1 h1 (ok v1) h2 ->
-      big_step e2 h2 (ex v2) h3 ->
-      big_step (EApp e1 e2) h1 (ex v2) h3
+      big_step e2 h2 (ex t v2) h3 ->
+      big_step (EApp e1 e2) h1 (ex t v2) h3
   | Op_big_step h1 h2 h3 e1 e2 op v1 v2 v :
       big_step e1 h1 (ok v1) h2 ->
       big_step e2 h2 (ok v2) h3 ->
       eval_bin_op op v1 v2 = Some v ->
       big_step (EOp op e1 e2) h1 (ok v) h3
-  | Op_big_step_ex_l h1 h2 e1 e2 op v1 :
-      big_step e1 h1 (ex v1) h2 ->
-      big_step (EOp op e1 e2) h1 (ex v1) h2
-  | Op_big_step_ex_r h1 h2 h3 e1 e2 op v1 v2 :
+  | Op_big_step_ex_l h1 h2 e1 e2 op t v1 :
+      big_step e1 h1 (ex t v1) h2 ->
+      big_step (EOp op e1 e2) h1 (ex t v1) h2
+  | Op_big_step_ex_r h1 h2 h3 e1 e2 op t v1 v2 :
       big_step e1 h1 (ok v1) h2 ->
-      big_step e2 h2 (ex v2) h3 ->
-      big_step (EOp op e1 e2) h1 (ex v2) h3
+      big_step e2 h2 (ex t v2) h3 ->
+      big_step (EOp op e1 e2) h1 (ex t v2) h3
   | Pair_big_step h1 h2 h3 e1 e2 v1 v2 :
       big_step e1 h1 (ok v1) h2 ->
       big_step e2 h2 (ok v2) h3 ->
       big_step (EPair e1 e2) h1 (ok (VPair v1 v2)) h3
-  | Pair_big_step_ex_l h1 h2 e1 e2 v1 :
-      big_step e1 h1 (ex v1) h2 ->
-      big_step (EPair e1 e2) h1 (ex v1) h2
-  | Pair_big_step_ex_r h1 h2 h3 e1 e2 v1 v2 :
+  | Pair_big_step_ex_l h1 h2 e1 e2 t v1 :
+      big_step e1 h1 (ex t v1) h2 ->
+      big_step (EPair e1 e2) h1 (ex t v1) h2
+  | Pair_big_step_ex_r h1 h2 h3 e1 e2 t v1 v2 :
       big_step e1 h1 (ok v1) h2 ->
-      big_step e2 h2 (ex v2) h3 ->
-      big_step (EPair e1 e2) h1 (ex v2) h3
+      big_step e2 h2 (ex t v2) h3 ->
+      big_step (EPair e1 e2) h1 (ex t v2) h3
   | Fst_big_step h1 h2 e v1 v2 :
       big_step e h1 (ok (VPair v1 v2)) h2 ->
       big_step (EFst e) h1 (ok v1) h2
-  | Fst_big_step_ex h1 h2 e v :
-      big_step e h1 (ex v) h2 ->
-      big_step (EFst e) h1 (ex v) h2
+  | Fst_big_step_ex h1 h2 e t v :
+      big_step e h1 (ex t v) h2 ->
+      big_step (EFst e) h1 (ex t v) h2
   | Snd_big_step h1 h2 e v1 v2 :
       big_step e h1 (ok (VPair v1 v2)) h2 ->
       big_step (ESnd e) h1 (ok v2) h2
-  | Snd_big_step_ex h1 h2 e v :
-      big_step e h1 (ex v) h2 ->
-      big_step (ESnd e) h1 (ex v) h2
+  | Snd_big_step_ex h1 h2 e t v :
+      big_step e h1 (ex t v) h2 ->
+      big_step (ESnd e) h1 (ex t v) h2
   | If_big_step_true h1 h2 h3 e1 e2 e3 r :
       big_step e1 h1 (ok (VBool true)) h2 ->
       big_step e2 h2 r h3 ->
@@ -143,61 +148,65 @@ Inductive big_step : expr -> heap -> res -> heap -> Prop :=
       big_step e1 h1 (ok (VBool false)) h2 ->
       big_step e3 h2 r h3 ->
       big_step (EIf e1 e2 e3) h1 r h3
-  | If_big_step_ex h1 h2 e1 e2 e3 v1 :
-      big_step e1 h1 (ex v1) h2 ->
-      big_step (EIf e1 e2 e3) h1 (ex v1) h2
+  | If_big_step_ex h1 h2 e1 e2 e3 t v1 :
+      big_step e1 h1 (ex t v1) h2 ->
+      big_step (EIf e1 e2 e3) h1 (ex t v1) h2
   | Seq_big_step h1 h2 h3 e1 e2 v1 r :
       big_step e1 h1 (ok v1) h2 ->
       big_step e2 h2 r h3 ->
       big_step (ESeq e1 e2) h1 r h3
-  | Seq_big_step_ex h1 h2 e1 e2 v1 :
-      big_step e1 h1 (ex v1) h2 ->
-      big_step (ESeq e1 e2) h1 (ex v1) h2
+  | Seq_big_step_ex h1 h2 e1 e2 t v1 :
+      big_step e1 h1 (ex t v1) h2 ->
+      big_step (ESeq e1 e2) h1 (ex t v1) h2
   | Alloc_big_step h1 h2 e v :
       big_step e h1 (ok v) h2 ->
       big_step (EAlloc e) h1 (ok (VRef (fresh h2))) (insert (fresh h2) v h2)
-  | Alloc_big_step_ex h1 h2 e v :
-      big_step e h1 (ex v) h2 ->
-      big_step (EAlloc e) h1 (ex v) h2
+  | Alloc_big_step_ex h1 h2 e t v :
+      big_step e h1 (ex t v) h2 ->
+      big_step (EAlloc e) h1 (ex t v) h2
   | Load_big_step h1 h2 e l v :
       big_step e h1 (ok (VRef l)) h2 ->
       lookup h2 l = Some v ->
       big_step (ELoad e) h1 (ok v) h2
-  | Load_big_step_ex h1 h2 e v :
-      big_step e h1 (ex v) h2 ->
-      big_step (ELoad e) h1 (ex v) h2
+  | Load_big_step_ex h1 h2 e t v :
+      big_step e h1 (ex t v) h2 ->
+      big_step (ELoad e) h1 (ex t v) h2
   | Store_big_step h1 h2 h3 e1 e2 l v2 :
       big_step e1 h1 (ok (VRef l)) h2 ->
       big_step e2 h2 (ok v2) h3 ->
       lookup h3 l <> None ->
      big_step (EStore e1 e2) h1 (ok (VRef l)) (insert l v2 h3)
-  | Store_big_step_ex_l h1 h2 e1 e2 v1 :
-      big_step e1 h1 (ex v1) h2 ->
-      big_step (EStore e1 e2) h1 (ex v1) h2
-  | Store_big_step_ex_r h1 h2 h3 e1 e2 v1 v2 :
+  | Store_big_step_ex_l h1 h2 e1 e2 t v1 :
+      big_step e1 h1 (ex t v1) h2 ->
+      big_step (EStore e1 e2) h1 (ex t v1) h2
+  | Store_big_step_ex_r h1 h2 h3 e1 e2 t v1 v2 :
       big_step e1 h1 (ok v1) h2 ->
-      big_step e2 h2 (ex v2) h3 ->
-      big_step (EStore e1 e2) h1 (ex v2) h3
+      big_step e2 h2 (ex t v2) h3 ->
+      big_step (EStore e1 e2) h1 (ex t v2) h3
   | Free_big_step h1 h2 e l v :
       big_step e h1 (ok (VRef l)) h2 ->
       lookup h2 l = Some v ->
       big_step (EFree e) h1 (ok v) (delete l h2)
-  | Free_big_step_ex h1 h2 e v :
-      big_step e h1 (ex v) h2 ->
-      big_step (EFree e) h1 (ex v) h2
-  | Throw_big_step h1 h2 e v :
+  | Free_big_step_ex h1 h2 e t v :
+      big_step e h1 (ex t v) h2 ->
+      big_step (EFree e) h1 (ex t v) h2
+  | Throw_big_step h1 h2 t e v :
       big_step e h1 (ok v) h2 ->
-      big_step (EThrow e) h1 (ex v) h2
-  | Throw_big_step_ex h1 h2 e v :
-      big_step e h1 (ex v) h2 ->
-      big_step (EThrow e) h1 (ex v) h2
-  | Catch_big_step h1 h2 e1 e2 v1 :
+      big_step (EThrow t e) h1 (ex t v) h2
+  | Throw_big_step_ex h1 h2 e t1 t2 v :
+      big_step e h1 (ex t1 v) h2 ->
+      big_step (EThrow t2 e) h1 (ex t1 v) h2
+  | Catch_big_step h1 h2 e1 e2 t v1 :
       big_step e1 h1 (ok v1) h2 ->
-      big_step (ECatch e1 e2) h1 (ok v1) h2
-  | Catch_big_step_ex h1 h2 h3 e1 e2 v1 r :
-      big_step e1 h1 (ex v1) h2 ->
+      big_step (ECatch e1 t e2) h1 (ok v1) h2
+  | Catch_big_step_ex_1 h1 h2 h3 e1 e2 t v1 r :
+      big_step e1 h1 (ex t v1) h2 ->
       big_step (EApp e2 (EVal v1)) h2 r h3 ->
-      big_step (ECatch e1 e2) h1 r h3.
+      big_step (ECatch e1 t e2) h1 r h3
+  | Catch_big_step_ex_2 h1 h2 e1 e2 t1 t2 v :
+      big_step e1 h1 (ex t1 v) h2 ->
+      t1 <> t2 ->
+      big_step (ECatch e1 t2 e2) h1 (ex t1 v) h2.
 
 Ltac inv_big :=
   repeat match goal with
@@ -306,7 +315,7 @@ Proof.
     apply big_step_ctx_ex; eauto.
 Qed.
 
-Global Hint Extern 0 (disjoint _ _) =>
+Hint Extern 0 (disjoint _ _) =>
   apply disjoint_comm; assumption : core.
 
 Lemma wp_frame Phi EPhi e R :
@@ -423,10 +432,6 @@ edestruct Hwp as (?&?&?&?&?);
 eauto 6 using big_step.
 Qed.
 
-
-
-
- 
-
+End sanyi.
 
 
