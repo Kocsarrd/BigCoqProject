@@ -253,7 +253,8 @@ Notation sepProp := (sepProp val).
 Notation "P # Q" := (res_rect (fun _ => sepProp) P Q)
   (at level 10, no associativity).
 
-Definition wp (e : expr) (Phi EPhi : val -> sepProp) : sepProp := fun h =>
+Definition wp (e : expr) (Phi : val -> sepProp) 
+                         (EPhi : tag -> val -> sepProp) : sepProp := fun h =>
   forall hf, disjoint h hf ->
     exists r h',
       disjoint h' hf /\
