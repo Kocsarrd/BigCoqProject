@@ -1,7 +1,7 @@
 From pv Require Export week8.
 Import NatMap.
 
-Section sanyi.
+Section exceptions.
 
 Context (tag : Type).
 Context (tag_dec : forall x y : tag, {x = y} + {x <> y}).
@@ -278,6 +278,7 @@ Proof.
     do 2 eexists; split; [| done]. apply IHHk2. eauto.
 Qed.
 
+(*
 Lemma big_step_ctx_ex k e v3 h1 h3 :
   ctx k ->
   big_step (k e) h1 (ex v3) h3 <->
@@ -300,6 +301,7 @@ Proof.
     + right; do 2 eexists; split; [| done]. apply big_step_ctx_ok; eauto.
 Qed.
 
+
 Lemma wp_ctx k Phi EPhi e :
   ctx k ->
   wp e (fun vret => wp (k (EVal vret)) Phi EPhi) EPhi |~ wp (k e) Phi EPhi.
@@ -315,10 +317,11 @@ Proof.
   - exists (ex v2), h2; repeat split; [done | | done].
     apply big_step_ctx_ex; eauto.
 Qed.
-
+*)
 Hint Extern 0 (disjoint _ _) =>
   apply disjoint_comm; assumption : core.
 
+(*
 Lemma wp_frame Phi EPhi e R :
   wp e Phi EPhi ** R |~ wp e (fun v => Phi v ** R) (fun v => EPhi v ** R).
 Proof.
@@ -343,7 +346,7 @@ Proof.
   exists r, h'; repeat split; [done .. |].
   destruct r as [v | v]; simpl in *; [by apply H1 | by apply H2].
 Qed.
-
+*)
 Lemma Val_wp Phi EPhi v : Phi v |~ wp (EVal v) Phi EPhi.
 Proof.
 intros h HPhi hf Hdisj. eauto using big_step.
@@ -366,6 +369,7 @@ split.
 destruct vret as [?|?];simpl in *; unfold "**";eauto 6.
 Qed.
 *)
+
 Lemma Op_wp Phi EPhi op v1 v2 v :
   eval_bin_op op v1 v2 = Some v ->
   Phi v |~ wp (EOp op (EVal v1) (EVal v2)) Phi EPhi.
@@ -433,6 +437,39 @@ edestruct Hwp as (?&?&?&?&?);
 eauto 6 using big_step.
 Qed.
 
-End sanyi.
+Lemma Store_wp Phi EPhi l v w :
+  l ~> v ** (l ~> w -** Phi (VRef l)) |~ wp (EStore (EVal (VRef l)) (EVal w)) Phi EPhi.
+Proof.
+intros h (h1 & h2 & -> & Hdisj & -> & Hwand) hf Hdisj'.
+apply disjoint_singleton in Hdisj.
+apply disjoint_union in Hdisj' as [??].
+apply disjoint_singleton in H.
+exists (ok (VRef l)), (union (singleton l w) h2);split.
+{ apply disjoint_union;split;[|done];by apply disjoint_singleton. }
+split.
+{ replace (union (union (singleton l w) h2) hf) 
+  with (insert l w (insert l v(union h2 hf))) by map_solver.
+  rewrite <- union_assoc, union_singleton_l. 
+  eapply Store_big_step;eauto using big_step.
+  map_solver.
+}
+apply Hwand;[|done]. by apply disjoint_singleton.
+Qed.
+
+Lemma Load_wp Phi EPhi l v :
+  l ~> v ** (l ~> v -** Phi v) |~ wp (ELoad (EVal (VRef l))) Phi EPhi.
+Proof.
+intros h (h1 & h2 & -> & Hdisj & -> & Hwand) hf Hdisj'.
+apply disjoint_singleton in Hdisj.
+apply disjoint_union in Hdisj' as [??].
+apply disjoint_singleton in H. 
+exists (ok v), (union (singleton l v) h2);split.
+{ apply disjoint_union;split;[|done]. by apply disjoint_singleton. }
+split.
+{ eapply Load_big_step;eauto using big_step. map_solver. }
+apply Hwand;[|done]. by apply disjoint_singleton.
+Qed.
+ 
+End exceptions.
 
 
