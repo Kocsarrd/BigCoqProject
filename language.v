@@ -1,10 +1,6 @@
 From pv Require Export week8.
+From stdpp Require Export base.
 Import NatMap.
-
-Section exceptions.
-
-Context {tag : Type}.
-Context (tag_dec : forall x y : tag, {x = y} + {x <> y}).
 
 Inductive bin_op :=
   | PlusOp
@@ -12,6 +8,11 @@ Inductive bin_op :=
   | LeOp
   | LtOp
   | EqOp.
+
+Definition tag := unit.
+Definition tag_dec (x y : tag) : {x = y} + {x <> y}.
+Proof. decide equality. Defined.
+Opaque tag tag_dec.
 
 Inductive expr :=
   | EVal : val -> expr
@@ -261,7 +262,15 @@ Ltac inv_big :=
   | H : big_step (ECatch _ _ _) _ _ _ |- _ => inv H
   end.
 
-Local Hint Extern 0 (disjoint _ _) =>
+Class TCSimpl {A} (x x' : A) := tc_simpl : x = x'.
+
+Global Hint Extern 0 (TCSimpl _ _) =>
+  simpl; reflexivity : typeclass_instances.
+
+Global Hint Extern 0 (TCEq _ _) =>
+  apply TCEq_eq; eassumption : typeclass_instances.
+
+Global Hint Extern 0 (disjoint _ _) =>
   apply disjoint_comm; assumption : core.
 
 Lemma big_step_ctx_ok k e v3 h1 h3 :
@@ -362,20 +371,30 @@ Proof.
   intros ???; eauto using big_step.
 Qed.
 
-Lemma App_wp Phi EPhi x e v :
-  wp (subst x v e) Phi EPhi |~
-    wp (EApp (EVal (VClosure x e)) (EVal v)) Phi EPhi.
+Lemma App_wp Phi EPhi x e v e' :
+  TCSimpl (subst x v e) e' ->
+  wp e' Phi EPhi |~ wp (EApp (EVal (VClosure x e)) (EVal v)) Phi EPhi.
 Proof.
-  intros h Hwp hf Hdisj.
-  edestruct Hwp as (vret & h' & Hdisj' & Hbs & HPost); [done|].
-  destruct vret as [?|?]; eauto 6 using big_step.
+  intros <- h Hwp hf Hdisj.
+  edestruct Hwp as (vret & h' & Hdisj' & Hbig & HPost); [done|].
+  eauto 6 using big_step.
+Qed.
+
+Lemma AppRec_wp Phi EPhi rec f x e v e' :
+  TCEq rec (VRecClosure f x e) ->
+  TCSimpl (subst x v (subst f rec e)) e' ->
+  wp e' Phi EPhi |~ wp (EApp (EVal rec) (EVal v)) Phi EPhi.
+Proof.
+  intros -> <- h Hwp hf Hdisj.
+  edestruct Hwp as (vret & h' & Hdisj' & Hbig & HPost); [done |].
+  eauto 6 using big_step.
 Qed.
 
 Lemma Op_wp Phi EPhi op v1 v2 v :
-  eval_bin_op op v1 v2 = Some v ->
+  TCEq (eval_bin_op op v1 v2) (Some v) ->
   Phi v |~ wp (EOp op (EVal v1) (EVal v2)) Phi EPhi.
 Proof.
-  intros Hop h HPhi hf Hdisj. 
+  intros Hop%TCEq_eq h HPhi hf Hdisj.
   eauto 6 using big_step.
 Qed.
 
@@ -512,5 +531,3 @@ Proof.
       exists r2, h2. eauto using big_step.
     + exists (ex t' v1), h1. eauto using big_step.
 Qed.
-
-End exceptions.
