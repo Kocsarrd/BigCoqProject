@@ -3,7 +3,7 @@ Import NatMap.
 
 Section exceptions.
 
-Context (tag : Type).
+Context {tag : Type}.
 Context (tag_dec : forall x y : tag, {x = y} + {x <> y}).
 
 Inductive bin_op :=
@@ -193,9 +193,9 @@ Inductive big_step : expr -> heap -> res -> heap -> Prop :=
   | Throw_big_step h1 h2 t e v :
       big_step e h1 (ok v) h2 ->
       big_step (EThrow t e) h1 (ex t v) h2
-  | Throw_big_step_ex h1 h2 e t1 t2 v :
-      big_step e h1 (ex t1 v) h2 ->
-      big_step (EThrow t2 e) h1 (ex t1 v) h2
+  | Throw_big_step_ex h1 h2 e t t' v :
+      big_step e h1 (ex t' v) h2 ->
+      big_step (EThrow t e) h1 (ex t' v) h2
   | Catch_big_step h1 h2 e1 e2 t v1 :
       big_step e1 h1 (ok v1) h2 ->
       big_step (ECatch e1 t e2) h1 (ok v1) h2
@@ -203,31 +203,10 @@ Inductive big_step : expr -> heap -> res -> heap -> Prop :=
       big_step e1 h1 (ex t v1) h2 ->
       big_step (EApp e2 (EVal v1)) h2 r h3 ->
       big_step (ECatch e1 t e2) h1 r h3
-  | Catch_big_step_ex_2 h1 h2 e1 e2 t1 t2 v :
-      big_step e1 h1 (ex t1 v) h2 ->
-      t1 <> t2 ->
-      big_step (ECatch e1 t2 e2) h1 (ex t1 v) h2.
-
-Ltac inv_big :=
-  repeat match goal with
-  | _ => progress simplify_eq
-  | H : big_step (EVal _) _ _ _ |- _ => inv H
-  | H : big_step (ELam _ _) _ _ _ |- _ => inv H
-  | H : big_step (ERec _ _ _) _ _ _ |- _ => inv H
-  | H : big_step (EApp _ _) _ _ _ |- _ => inv H
-  | H : big_step (EOp _ _ _) _ _ _ |- _ => inv H
-  | H : big_step (EPair _ _) _ _ _ |- _ => inv H
-  | H : big_step (EFst _) _ _ _ |- _ => inv H
-  | H : big_step (ESnd _) _ _ _ |- _ => inv H
-  | H : big_step (EIf _ _ _) _ _ _ |- _ => inv H
-  | H : big_step (ESeq _ _) _ _ _ |- _ => inv H
-  | H : big_step (EAlloc _) _ _ _ |- _ => inv H
-  | H : big_step (ELoad _) _ _ _ |- _ => inv H
-  | H : big_step (EStore _ _) _ _ _ |- _ => inv H
-  | H : big_step (EFree _) _ _ _ |- _ => inv H
-  | H : big_step (EThrow _) _ _ _ |- _ => inv H
-  | H : big_step (ECatch _ _) _ _ _ |- _ => inv H
-  end.
+  | Catch_big_step_ex_2 h1 h2 e1 e2 t t' v1 :
+      big_step e1 h1 (ex t' v1) h2 ->
+      t <> t' ->
+      big_step (ECatch e1 t e2) h1 (ex t' v1) h2.
 
 Inductive ctx : (expr -> expr) -> Prop :=
   | App_l_ctx e2 : ctx (fun x => EApp x e2)
@@ -261,6 +240,30 @@ Definition wp (e : expr) (Phi : val -> sepProp)
       big_step e (union h hf) r (union h' hf) /\
       (Phi # EPhi) r h'.
 
+Ltac inv_big :=
+  repeat match goal with
+  | _ => progress simplify_eq
+  | H : big_step (EVal _) _ _ _ |- _ => inv H
+  | H : big_step (ELam _ _) _ _ _ |- _ => inv H
+  | H : big_step (ERec _ _ _) _ _ _ |- _ => inv H
+  | H : big_step (EApp _ _) _ _ _ |- _ => inv H
+  | H : big_step (EOp _ _ _) _ _ _ |- _ => inv H
+  | H : big_step (EPair _ _) _ _ _ |- _ => inv H
+  | H : big_step (EFst _) _ _ _ |- _ => inv H
+  | H : big_step (ESnd _) _ _ _ |- _ => inv H
+  | H : big_step (EIf _ _ _) _ _ _ |- _ => inv H
+  | H : big_step (ESeq _ _) _ _ _ |- _ => inv H
+  | H : big_step (EAlloc _) _ _ _ |- _ => inv H
+  | H : big_step (ELoad _) _ _ _ |- _ => inv H
+  | H : big_step (EStore _ _) _ _ _ |- _ => inv H
+  | H : big_step (EFree _) _ _ _ |- _ => inv H
+  | H : big_step (EThrow _ _) _ _ _ |- _ => inv H
+  | H : big_step (ECatch _ _ _) _ _ _ |- _ => inv H
+  end.
+
+Local Hint Extern 0 (disjoint _ _) =>
+  apply disjoint_comm; assumption : core.
+
 Lemma big_step_ctx_ok k e v3 h1 h3 :
   ctx k ->
   big_step (k e) h1 (ok v3) h3 <->
@@ -278,14 +281,13 @@ Proof.
     do 2 eexists; split; [| done]. apply IHHk2. eauto.
 Qed.
 
-(*
-Lemma big_step_ctx_ex k e v3 h1 h3 :
+Lemma big_step_ctx_ex k e t v3 h1 h3 :
   ctx k ->
-  big_step (k e) h1 (ex v3) h3 <->
-    big_step e h1 (ex v3) h3 \/
+  big_step (k e) h1 (ex t v3) h3 <->
+    big_step e h1 (ex t v3) h3 \/
     exists v2 h2,
       big_step e h1 (ok v2) h2 /\
-      big_step (k (EVal v2)) h2 (ex v3) h3.
+      big_step (k (EVal v2)) h2 (ex t v3) h3.
 Proof.
   intros Hk; revert e v3 h1 h3; induction Hk; intros e v3 h1 h3;
     (split; [intros H3 | intros [H | (v2 & h2 & H1 & H2)]]);
@@ -301,6 +303,30 @@ Proof.
     + right; do 2 eexists; split; [| done]. apply big_step_ctx_ok; eauto.
 Qed.
 
+Lemma wp_mono Phi Psi EPhi EPsi e :
+  (forall v, Phi v |~ Psi v) ->
+  (forall t v, EPhi t v |~ EPsi t v) ->
+  wp e Phi EPhi |~ wp e Psi EPsi.
+Proof.
+  intros H1 H2 h He hf Hdisj.
+  edestruct He as (r & h' & Hdisj' & Hbig & Hr); [done |].
+  exists r, h'; repeat split; [done .. |].
+  destruct r as [v | t v]; simpl in *; [by apply H1 | by apply H2].
+Qed.
+
+Lemma wp_frame Phi EPhi e R :
+  wp e Phi EPhi ** R |~ wp e (fun v => Phi v ** R) (fun t v => EPhi t v ** R).
+Proof.
+  intros h (h1 & h2 & -> & Hdisj & He & HR) hf Hdisj'.
+  apply disjoint_union in Hdisj' as [??].
+  destruct (He (union h2 hf)) as (r & h1' & Hdisj' & Hbig & Hr).
+  { by apply disjoint_comm, disjoint_union. }
+  apply disjoint_comm, disjoint_union in Hdisj' as [??].
+  exists r, (union h1' h2); repeat split.
+  { by apply disjoint_union. }
+  { by rewrite <-!union_assoc. }
+  destruct r as [v | t v]; simpl in *; by exists h1', h2.
+Qed.
 
 Lemma wp_ctx k Phi EPhi e :
   ctx k ->
@@ -308,168 +334,183 @@ Lemma wp_ctx k Phi EPhi e :
 Proof.
   intros Hk h1 He hf Hdisj1.
   edestruct He as (r2 & h2 & Hdisj2 & Hbig2 & Hr2); [done |].
-  destruct r2 as [v2 | v2]; simpl in Hr2.
+  destruct r2 as [v2 | t v2]; simpl in Hr2.
   - edestruct Hr2 as (r3 & h3 & Hdisj3 & Hbig3 & Hr3); [done |].
     exists r3, h3; repeat split; [done | | done].
     destruct r3 as [v3 | v3].
     + apply big_step_ctx_ok; eauto.
     + apply big_step_ctx_ex; eauto.
-  - exists (ex v2), h2; repeat split; [done | | done].
+  - exists (ex t v2), h2; repeat split; [done | | done].
     apply big_step_ctx_ex; eauto.
 Qed.
-*)
-Hint Extern 0 (disjoint _ _) =>
-  apply disjoint_comm; assumption : core.
 
-(*
-Lemma wp_frame Phi EPhi e R :
-  wp e Phi EPhi ** R |~ wp e (fun v => Phi v ** R) (fun v => EPhi v ** R).
+Lemma Val_wp Phi EPhi v :
+  Phi v |~ wp (EVal v) Phi EPhi.
 Proof.
-  intros h (h1 & h2 & -> & Hdisj & He & HR) hf Hdisj'.
-  apply disjoint_union in Hdisj' as [??].
-  destruct (He (union h2 hf)) as (r & h1' & Hdisj1 & Hbig1 & Hr).
-  { by apply disjoint_comm, disjoint_union. }
-  apply disjoint_comm, disjoint_union in Hdisj1 as [??].
-  exists r, (union h1' h2); repeat split.
-  { by apply disjoint_union. }
-  { by rewrite <-!union_assoc. }
-  destruct r as [v | v]; simpl in *; by exists h1', h2.
-Qed.
-
-Lemma wp_mono Phi Psi EPhi EPsi e :
-  (forall v, Phi v |~ Psi v) ->
-  (forall v, EPhi v |~ EPsi v) ->
-  wp e Phi EPhi |~ wp e Psi EPsi.
-Proof.
-  intros H1 H2 h He hf Hdisj.
-  edestruct He as (r & h' & Hdisj' & Hbig & Hr); [done |].
-  exists r, h'; repeat split; [done .. |].
-  destruct r as [v | v]; simpl in *; [by apply H1 | by apply H2].
-Qed.
-*)
-Lemma Val_wp Phi EPhi v : Phi v |~ wp (EVal v) Phi EPhi.
-Proof.
-intros h HPhi hf Hdisj. eauto using big_step.
-Qed.
-
-(*
-Lemma wp_frame Phi EPhi R e :
-  wp e Phi EPhi ** R |~ wp e (fun vret => Phi vret ** R) 
-                             (fun vret => EPhi vret ** R).
-Proof.
-intros h (h1 & h2 & -> & Hdisj & Hwp & HR) hf Hdisj'.
-apply disjoint_union in Hdisj' as [??].
-destruct (Hwp (union h2 hf)) as (vret & h' & Hdisj' & Hbig & HPhi).
-{ by apply disjoint_comm, disjoint_union. }
-  exists vret, (union h' h2);split
-  ;apply disjoint_comm, disjoint_union in Hdisj' as [??].
-{ by apply disjoint_union. }
-split. 
-{ by do 2 rewrite <- union_assoc. }
-destruct vret as [?|?];simpl in *; unfold "**";eauto 6.
-Qed.
-*)
-
-Lemma Op_wp Phi EPhi op v1 v2 v :
-  eval_bin_op op v1 v2 = Some v ->
-  Phi v |~ wp (EOp op (EVal v1) (EVal v2)) Phi EPhi.
-Proof.
-intros Hop h HPhi hf Hdisj. 
-eauto 6 using big_step.
-Qed.
-
-
-Lemma Seq_wp Phi EPhi v e :
-  wp (EVal v) (fun _ => wp e Phi EPhi) EPhi |~ wp (ESeq (EVal v) e) Phi EPhi.
-Proof.
-intros h Hwp hf Hdisj.
-edestruct Hwp as (vret & h' & Hdisj' & Hbs & HPost);[done|].
-destruct vret as [?|?];simpl in *.
-{ edestruct HPost as (?&?&?&?&?);[done|]; eauto 6 using big_step. }
-eauto 6 using big_step.
-Qed.
-
-Lemma App_wp Phi EPhi x e v :
-  wp (subst x v e) Phi EPhi |~ wp (EApp (EVal (VClosure x e)) (EVal v)) Phi EPhi.
-Proof.
-intros h Hwp hf Hdisj.
-edestruct Hwp as (vret & h' & Hdisj' & Hbs & HPost);[done|].
-destruct vret as [?|?];eauto 6 using big_step.
+  intros h HPhi hf Hdisj. eauto using big_step.
 Qed.
 
 Lemma Lam_wp Phi EPhi x e :
   Phi (VClosure x e) |~ wp (ELam x e) Phi EPhi.
 Proof.
-intros ???; eauto using big_step.
+  intros ???; eauto using big_step.
+Qed.
+
+Lemma Rec_wp Phi EPhi f x e :
+  Phi (VRecClosure f x e) |~ wp (ERec f x e) Phi EPhi.
+Proof.
+  intros ???; eauto using big_step.
+Qed.
+
+Lemma App_wp Phi EPhi x e v :
+  wp (subst x v e) Phi EPhi |~
+    wp (EApp (EVal (VClosure x e)) (EVal v)) Phi EPhi.
+Proof.
+  intros h Hwp hf Hdisj.
+  edestruct Hwp as (vret & h' & Hdisj' & Hbs & HPost); [done|].
+  destruct vret as [?|?]; eauto 6 using big_step.
+Qed.
+
+Lemma Op_wp Phi EPhi op v1 v2 v :
+  eval_bin_op op v1 v2 = Some v ->
+  Phi v |~ wp (EOp op (EVal v1) (EVal v2)) Phi EPhi.
+Proof.
+  intros Hop h HPhi hf Hdisj. 
+  eauto 6 using big_step.
 Qed.
 
 Lemma Pair_wp Phi EPhi v1 v2 :
   Phi (VPair v1 v2) |~ wp (EPair (EVal v1) (EVal v2)) Phi EPhi.
 Proof.
-intros ???; eauto 6 using big_step.
+  intros ???; eauto 6 using big_step.
 Qed.
 
 Lemma Fst_wp Phi EPhi v1 v2 :
   Phi v1 |~ wp (EFst (EVal (VPair v1 v2))) Phi EPhi.
 Proof.
-intros ???;eauto 6 using big_step.
+  intros ???; eauto 6 using big_step.
 Qed.
 
 Lemma Snd_wp Phi EPhi v1 v2 :
   Phi v2 |~ wp (ESnd (EVal (VPair v1 v2))) Phi EPhi.
 Proof.
-intros ???;eauto 6 using big_step.
+  intros ???; eauto 6 using big_step.
 Qed.
 
 Lemma If_true_wp Phi EPhi e2 e3 :
   wp e2 Phi EPhi |~ wp (EIf (EVal (VBool true)) e2 e3) Phi EPhi.
 Proof.  
-intros h Hwp hf Hdisj.
-edestruct Hwp as (?&?&?&?&?);
-eauto 6 using big_step.
+  intros h Hwp hf Hdisj.
+  edestruct Hwp as (?&?&?&?&?); eauto 6 using big_step.
 Qed.
 
 Lemma If_false_wp Phi EPhi e2 e3 :
   wp e3 Phi EPhi |~ wp (EIf (EVal (VBool false)) e2 e3) Phi EPhi.
 Proof.
-intros h Hwp hf Hdisj.
-edestruct Hwp as (?&?&?&?&?);
-eauto 6 using big_step.
+  intros h Hwp hf Hdisj.
+  edestruct Hwp as (?&?&?&?&?); eauto 6 using big_step.
+Qed.
+
+Lemma Seq_wp Phi EPhi v e :
+  wp e Phi EPhi |~ wp (ESeq (EVal v) e) Phi EPhi.
+Proof.
+  intros h Hwp hf Hdisj.
+  edestruct Hwp as (vret & h' & Hdisj' & Hbs & HPost); [done|].
+  eauto 6 using big_step.
+Qed.
+
+Lemma Alloc_wp Phi EPhi v :
+  (All l, l ~> v -** Phi (VRef l)) |~ wp (EAlloc (EVal v)) Phi EPhi.
+Proof.
+  intros h H hf Hdisj. set (l := fresh (union h hf)).
+  exists (ok (VRef l)), (union (singleton l v) h); repeat split.
+  - rewrite disjoint_union, disjoint_singleton. split; [subst l | done].
+    rewrite disjoint_union_comm; [| done].
+    apply lookup_fresh_incl, incl_union_l.
+  - replace (union (union (singleton l v) h) hf) with (insert l v (union h hf))
+         by map_solver. eauto using big_step.
+  - apply H; [| done]. rewrite disjoint_singleton; subst l.
+    apply lookup_fresh_incl, incl_union_l.
 Qed.
 
 Lemma Store_wp Phi EPhi l v w :
-  l ~> v ** (l ~> w -** Phi (VRef l)) |~ wp (EStore (EVal (VRef l)) (EVal w)) Phi EPhi.
+  l ~> v ** (l ~> w -** Phi (VRef l)) |~
+    wp (EStore (EVal (VRef l)) (EVal w)) Phi EPhi.
 Proof.
-intros h (h1 & h2 & -> & Hdisj & -> & Hwand) hf Hdisj'.
-apply disjoint_singleton in Hdisj.
-apply disjoint_union in Hdisj' as [??].
-apply disjoint_singleton in H.
-exists (ok (VRef l)), (union (singleton l w) h2);split.
-{ apply disjoint_union;split;[|done];by apply disjoint_singleton. }
-split.
-{ replace (union (union (singleton l w) h2) hf) 
-  with (insert l w (insert l v(union h2 hf))) by map_solver.
-  rewrite <- union_assoc, union_singleton_l. 
-  eapply Store_big_step;eauto using big_step.
-  map_solver.
-}
-apply Hwand;[|done]. by apply disjoint_singleton.
+  intros h (h1 & h2 & -> & Hdisj & -> & Hwand) hf Hdisj'.
+  apply disjoint_singleton in Hdisj.
+  apply disjoint_union in Hdisj' as [??].
+  apply disjoint_singleton in H.
+  exists (ok (VRef l)), (union (singleton l w) h2); split.
+  { apply disjoint_union; split; [|done]; by apply disjoint_singleton. }
+  split.
+  { replace (union (union (singleton l w) h2) hf) 
+      with (insert l w (insert l v (union h2 hf))) by map_solver.
+    rewrite <- union_assoc, union_singleton_l. 
+    eapply Store_big_step; eauto using big_step.
+    map_solver.
+  }
+  apply Hwand; [|done]. by apply disjoint_singleton.
 Qed.
 
 Lemma Load_wp Phi EPhi l v :
   l ~> v ** (l ~> v -** Phi v) |~ wp (ELoad (EVal (VRef l))) Phi EPhi.
 Proof.
-intros h (h1 & h2 & -> & Hdisj & -> & Hwand) hf Hdisj'.
-apply disjoint_singleton in Hdisj.
-apply disjoint_union in Hdisj' as [??].
-apply disjoint_singleton in H. 
-exists (ok v), (union (singleton l v) h2);split.
-{ apply disjoint_union;split;[|done]. by apply disjoint_singleton. }
-split.
-{ eapply Load_big_step;eauto using big_step. map_solver. }
-apply Hwand;[|done]. by apply disjoint_singleton.
+  intros h (h1 & h2 & -> & Hdisj & -> & Hwand) hf Hdisj'.
+  apply disjoint_singleton in Hdisj.
+  apply disjoint_union in Hdisj' as [??].
+  apply disjoint_singleton in H. 
+  exists (ok v), (union (singleton l v) h2); split.
+  { apply disjoint_union; split; [|done]. by apply disjoint_singleton. }
+  split.
+  { eapply Load_big_step; eauto using big_step. map_solver. }
+  apply Hwand; [|done]. by apply disjoint_singleton.
 Qed.
- 
+
+Lemma Free_wp Phi EPhi l v :
+  l ~> v ** Phi v |~ wp (EFree (EVal (VRef l))) Phi EPhi.
+Proof.
+  intros h (h1 & h2 & -> & Hdisj & -> & HPhi) hf Hdisj'.
+  apply disjoint_singleton in Hdisj.
+  apply disjoint_union in Hdisj' as [?%disjoint_singleton ?].
+  exists (ok v), h2; repeat split; [done | | done].
+  replace (union h2 hf) with (delete l (union (union (singleton l v) h2) hf))
+       by map_solver.
+  apply Free_big_step; [apply Val_big_step | map_solver].
+Qed.
+
+Lemma Throw_wp Phi EPhi t e :
+  wp e (EPhi t) EPhi |~ wp (EThrow t e) Phi EPhi.
+Proof.
+  intros h He hf Hdisj.
+  edestruct He as (r & h' & Hdisj' & Hbig & Hr); [done |].
+  destruct r as [v | t' v].
+  - exists (ex t v), h'. eauto using big_step.
+  - exists (ex t' v), h'. eauto using big_step.
+Qed.
+
+Lemma Throw_Val_wp Phi EPhi t v :
+  EPhi t v |~ wp (EThrow t (EVal v)) Phi EPhi.
+Proof.
+  eapply sepEntails_trans; [| apply Throw_wp].
+  eapply sepEntails_trans; [| apply Val_wp].
+  apply sepEntails_refl.
+Qed.
+
+Notation catch_ex_cond Phi EPhi t e2 := (fun t' v =>
+  if tag_dec t t' then wp (EApp e2 (EVal v)) Phi EPhi else EPhi t' v).
+
+Lemma Catch_wp Phi EPhi e1 t e2 :
+  wp e1 Phi (catch_ex_cond Phi EPhi t e2) |~ wp (ECatch e1 t e2) Phi EPhi.
+Proof.
+  intros h He1 hf Hdisj.
+  edestruct He1 as (r1 & h1 & Hdisj1 & Hbig & Hr1); [done |].
+  destruct r1 as [v1 | t' v1]; simpl in Hr1.
+  - exists (ok v1), h1. eauto using big_step.
+  - destruct (tag_dec t t') as [<- | Ht].
+    + edestruct Hr1 as (r2 & h2 & Hdisj2 & Hbig2 & Hr2); [done |].
+      exists r2, h2. eauto using big_step.
+    + exists (ex t' v1), h1. eauto using big_step.
+Qed.
+
 End exceptions.
-
-
