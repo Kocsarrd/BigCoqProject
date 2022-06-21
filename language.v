@@ -2,17 +2,17 @@ From pv Require Export week8.
 From stdpp Require Export base.
 Import NatMap.
 
+Definition tag := unit.
+Definition tag_dec (x y : tag) : {x = y} + {x <> y}.
+Proof. decide equality. Defined.
+Opaque tag tag_dec.
+
 Inductive bin_op :=
   | PlusOp
   | MinusOp
   | LeOp
   | LtOp
   | EqOp.
-
-Definition tag := unit.
-Definition tag_dec (x y : tag) : {x = y} + {x <> y}.
-Proof. decide equality. Defined.
-Opaque tag tag_dec.
 
 Inductive expr :=
   | EVal : val -> expr
@@ -240,6 +240,10 @@ Definition wp (e : expr) (Phi : val -> sepProp)
       disjoint h' hf /\
       big_step e (union h hf) r (union h' hf) /\
       (Phi # EPhi) r h'.
+
+Definition hoare (P : sepProp) (e : expr)
+                 (Phi : val -> sepProp) (EPhi : tag -> val -> sepProp) : Prop :=
+  P |~ wp e Phi EPhi.
 
 Ltac inv_big :=
   repeat match goal with
@@ -531,3 +535,189 @@ Proof.
       exists r2, h2. eauto using big_step.
     + exists (ex t' v1), h1. eauto using big_step.
 Qed.
+
+Notation ELet x e1 e2 := (EApp (ELam x e2) e1).
+
+Notation EInjL e := (EPair (EVal (VBool true)) e).
+Notation EInjR e := (EPair (EVal (VBool false)) e).
+
+Notation VInjL v := (VPair (VBool true) v).
+Notation VInjR v := (VPair (VBool false) v).
+
+Definition sum_case :=
+  VClosure "x" (ELam "f1" (ELam "f2"
+    (EIf (EFst (EVar "x"))
+         (EApp (EVar "f1") (ESnd (EVar "x")))
+         (EApp (EVar "f2") (ESnd (EVar "x")))))).
+Notation EMatch e x1 e1 x2 e2 :=
+  (EApp (EApp (EApp (EVal sum_case) e) (ELam x1 e1)) (ELam x2 e2)).
+
+Opaque wp.
+
+Lemma sepEntails_trans' (P Q R : sepProp) :
+  (Q |~ R) ->
+  (P |~ Q) ->
+  P |~ R.
+Proof.
+  intros ??; by eapply sepEntails_trans.
+Qed.
+
+Lemma Let_wp Phi EPhi x v1 e2 e' :
+  TCSimpl (subst x v1 e2) e' ->
+  wp e' Phi EPhi |~ wp (ELet x (EVal v1) e2) Phi EPhi.
+Proof.
+  intros <-.
+  eapply sepEntails_trans'.
+  { apply (wp_ctx (fun x => EApp x _)); constructor. }
+  eapply sepEntails_trans'; [apply Lam_wp |].
+  by apply App_wp.
+Qed.
+
+Lemma InjL_wp Phi EPhi v :
+  Phi (VInjL v) |~ wp (EInjL (EVal v)) Phi EPhi.
+Proof.
+  eapply sepEntails_trans'; [apply Pair_wp |].
+  apply sepEntails_refl.
+Qed.
+
+Lemma InjR_wp Phi EPhi v :
+  Phi (VInjR v) |~ wp (EInjR (EVal v)) Phi EPhi.
+Proof.
+  eapply sepEntails_trans'; [apply Pair_wp |].
+  apply sepEntails_refl.
+Qed.
+
+Lemma Match_InjL_wp Phi EPhi v x1 e1 x2 e2 e' :
+  TCSimpl (subst x1 v e1) e' ->
+  wp e' Phi EPhi |~ wp (EMatch (EVal (VInjL v)) x1 e1 x2 e2) Phi EPhi.
+Proof.
+  intros <-.
+  eapply sepEntails_trans'.
+  { apply (wp_ctx (fun x => EApp x _)); constructor. }
+  eapply sepEntails_trans'.
+  { apply (wp_ctx (fun x => EApp x _)); constructor. }
+  eapply sepEntails_trans'; [by apply App_wp | simpl].
+  eapply sepEntails_trans'; [apply Lam_wp |].
+  eapply sepEntails_trans'.
+  { apply (wp_ctx (EApp _)); constructor. }
+  eapply sepEntails_trans'; [apply Lam_wp |].
+  eapply sepEntails_trans'; [by apply App_wp | simpl].
+  eapply sepEntails_trans'; [apply Lam_wp |].
+  eapply sepEntails_trans'.
+  { apply (wp_ctx (EApp _)); constructor. }
+  eapply sepEntails_trans'; [apply Lam_wp |].
+  eapply sepEntails_trans'; [by apply App_wp | simpl].
+  eapply sepEntails_trans'.
+  { apply (wp_ctx (fun x => EIf x _ _)); constructor. }
+  eapply sepEntails_trans'; [apply Fst_wp |].
+  eapply sepEntails_trans'; [apply If_true_wp |].
+  eapply sepEntails_trans'.
+  { apply (wp_ctx (EApp _)); constructor. }
+  eapply sepEntails_trans'; [apply Snd_wp |].
+  by apply App_wp.
+Qed.
+
+Lemma Match_InjR_wp Phi EPhi v x1 e1 x2 e2 e' :
+  TCSimpl (subst x2 v e2) e' ->
+  wp e' Phi EPhi |~ wp (EMatch (EVal (VInjR v)) x1 e1 x2 e2) Phi EPhi.
+Proof.
+  intros <-.
+  eapply sepEntails_trans'.
+  { apply (wp_ctx (fun x => EApp x _)); constructor. }
+  eapply sepEntails_trans'.
+  { apply (wp_ctx (fun x => EApp x _)); constructor. }
+  eapply sepEntails_trans'; [by apply App_wp | simpl].
+  eapply sepEntails_trans'; [apply Lam_wp |].
+  eapply sepEntails_trans'.
+  { apply (wp_ctx (EApp _)); constructor. }
+  eapply sepEntails_trans'; [apply Lam_wp |].
+  eapply sepEntails_trans'; [by apply App_wp | simpl].
+  eapply sepEntails_trans'; [apply Lam_wp |].
+  eapply sepEntails_trans'.
+  { apply (wp_ctx (EApp _)); constructor. }
+  eapply sepEntails_trans'; [apply Lam_wp |].
+  eapply sepEntails_trans'; [by apply App_wp | simpl].
+  eapply sepEntails_trans'.
+  { apply (wp_ctx (fun x => EIf x _ _)); constructor. }
+  eapply sepEntails_trans'; [apply Fst_wp |].
+  eapply sepEntails_trans'; [apply If_false_wp |].
+  eapply sepEntails_trans'.
+  { apply (wp_ctx (EApp _)); constructor. }
+  eapply sepEntails_trans'; [apply Snd_wp |].
+  by apply App_wp.
+Qed.
+
+(* ########################################################################## *)
+(** Notations *)
+(* ########################################################################## *)
+
+Module language_notation.
+  Coercion EVar : string >-> expr.
+  Coercion EVal : val >-> expr.
+  Coercion EApp : expr >-> Funclass.
+
+  Notation "'let:' x := e1 'in' e2" := (ELet x e1 e2)
+    (at level 200, x at level 1, e1, e2 at level 200,
+     format "'[' 'let:'  x  :=  '[' e1 ']'  'in'  '/' e2 ']'").
+  Notation "e1 ;; e2" := (ESeq e1 e2)
+    (at level 100, e2 at level 200,
+     format "'[' '[hv' '[' e1 ']' ;;  ']' '/' e2 ']'").
+  Notation "! e" := (ELoad e) (at level 9, right associativity, format "! e").
+  Notation "e1 <- e2" := (EStore e1 e2) (at level 80).
+  Notation "'if:' e1 'then' e2 'else' e3" := (EIf e1 e2 e3)
+    (at level 200, e1, e2, e3 at level 200).
+
+  Notation "'match:' e 'with' 'InjL' x1 => e1 | 'InjR' x2 => e2 'end'" :=
+    (EMatch e x1 e1 x2 e2)
+    (e, x1, e1, x2, e2 at level 200,
+     format "'[hv' 'match:'  e  'with'  '/  ' '[' 'InjL'  x1  =>  '/  ' e1 ']'  '/' '[' |  'InjR'  x2  =>  '/  ' e2 ']'  '/' 'end' ']'").
+  Notation "'match:' e 'with' 'InjR' x1 => e1 | 'InjL' x2 => e2 'end'" :=
+    (EMatch e x2 e2 x1 e1)
+    (e, x1, e1, x2, e2 at level 200, only parsing).
+
+  Notation "fun: x => e" := (ELam x e)
+    (at level 200, x at level 1, e at level 200,
+     format "'[' 'fun:'  x  =>  '/  ' e ']'").
+  Notation "fun: x y .. z => e" := (ELam x (ELam y .. (ELam z e) ..))
+    (at level 200, x, y, z at level 1, e at level 200,
+     format "'[' 'fun:'  x  y  ..  z  =>  '/  ' e ']'").
+  Notation "closure: x => e" := (VClosure x e)
+    (at level 200, x at level 1, e at level 200,
+     format "'[' 'closure:'  x  =>  '/  ' e ']'").
+  Notation "closure: x y .. z => e" := (VClosure x (ELam y .. (ELam z e) ..))
+    (at level 200, x, y, z at level 1, e at level 200,
+     format "'[' 'closure:'  x  y  ..  z  =>  '/  ' e ']'").
+
+  Notation "'rec:' f x => e" := (ERec f x e)
+    (at level 200, f at level 1, x at level 1, e at level 200,
+     format "'[' 'rec:'  f  x  =>  '/  ' e ']'").
+  Notation "'rec:' f x y .. z => e" := (ERec f x (ELam y .. (ELam z e) ..))
+    (at level 200, f, x, y, z at level 1, e at level 200,
+     format "'[' 'rec:'  f  x  y  ..  z  =>  '/  ' e ']'").
+  Notation "'recclosure:' f x => e" := (VRecClosure f x e)
+    (at level 200, f at level 1, x at level 1, e at level 200,
+     format "'[' 'recclosure:'  f  x  =>  '/  ' e ']'").
+  Notation "'recclosure:' f x y .. z => e" :=
+    (VRecClosure f x (ELam y .. (ELam z e) ..))
+    (at level 200, f, x, y, z at level 1, e at level 200,
+     format "'[' 'recclosure:'  f  x  y  ..  z  =>  '/  ' e ']'").
+
+  Notation "e1 +: e2" := (EOp PlusOp e1 e2) (at level 50, left associativity).
+  Notation "e1 -: e2" := (EOp MinusOp e1 e2) (at level 50, left associativity).
+  Notation "e1 =: e2" := (EOp EqOp e1 e2) (at level 70, no associativity).
+  Notation "e1 <=: e2" := (EOp LeOp e1 e2) (at level 70, no associativity).
+  Notation "e1 <: e2" := (EOp LtOp e1 e2) (at level 70, no associativity).
+End language_notation.
+
+Module hoare_notation.
+
+  Notation "'WP' e {{ v , Q } } {{ w , R } }" :=
+    (wp e (fun v => Q) (fun w => R))
+    (at level 20, e, Q, R at level 200,
+     format "'[hv' 'WP'  e  '/' {{  '[' v ,  '/' Q  ']' } }  '/' {{  '[' w ,  '/' R  ']' } } ']'").
+
+  Notation "{{ P } } e {{ v , Q } } {{ w , R } }" :=
+    (hoare P e (fun v => Q) (fun w => R))
+    (at level 20, P, e, Q, R at level 200,
+     format "'[' {{  P  } } ']' '/  '  '[' e ']'  '/' '[' {{  v ,  Q  } } ']'  '/' '[' {{  w ,  R  } } ']'").
+End hoare_notation.
