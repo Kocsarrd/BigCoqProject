@@ -410,3 +410,273 @@ Proof. intros [? ->]. by apply wp_ctx. Qed.
 course, so we disable it. *)
 
 Global Unset SsrRewrite.
+
+
+(* ########################################################################## *)
+(** Substitution *)
+(* ########################################################################## *)
+
+Fixpoint subst_map (vs : stringmap val) (e : expr) : expr :=
+  match e with
+  | EVal _ => e
+  | EVar y =>
+     match StringMap.lookup vs y with
+     | Some v => EVal v
+     | None => EVar y
+     end
+  | ELam y e => ELam y (subst_map (StringMap.delete y vs) e)
+  | ERec f y e =>
+     ERec f y (subst_map (StringMap.delete y (StringMap.delete f vs)) e)
+  | EApp e1 e2 => EApp (subst_map vs e1) (subst_map vs e2)
+  | EOp op e1 e2 => EOp op (subst_map vs e1) (subst_map vs e2)
+  | EPair e1 e2 => EPair (subst_map vs e1) (subst_map vs e2)
+  | EFst e => EFst (subst_map vs e)
+  | ESnd e => ESnd (subst_map vs e)
+  | EIf e1 e2 e3 => EIf (subst_map vs e1) (subst_map vs e2) (subst_map vs e3)
+  | ESeq e1 e2 => ESeq (subst_map vs e1) (subst_map vs e2)
+  | EAlloc e => EAlloc (subst_map vs e)
+  | EStore e1 e2 => EStore (subst_map vs e1) (subst_map vs e2)
+  | ELoad e => ELoad (subst_map vs e)
+  | EFree e => EFree (subst_map vs e)
+  | EThrow t e => EThrow t (subst_map vs e)
+  | ECatch e1 t e2 => ECatch (subst_map vs e1) t (subst_map vs e2)
+  end.
+
+Lemma subst_map_empty e :
+  subst_map StringMap.empty e = e.
+Proof. induction e; simpl; by f_equal. Qed.
+
+Lemma subst_map_insert x v e env :
+  subst_map (StringMap.insert x v env) e
+  = subst x v (subst_map (StringMap.delete x env) e).
+Proof.
+  revert env. induction e; intros env; simpl; try (by f_equal).
+  - (** Case var *)
+    rewrite StringMap.lookup_delete, StringMap.lookup_insert.
+    destruct (String.eq_dec _ _); simplify_eq.
+    + by destruct (String.eq_dec _ _).
+    + destruct (StringMap.lookup env s) eqn:E; simpl; eauto.
+      by destruct (String.eq_dec _ _).
+  - (** Case lam *)
+    destruct (String.eq_dec _ _); simplify_eq.
+    + f_equal. f_equal. StringMap.map_solver.
+    + f_equal. rewrite StringMap.delete_delete.
+      destruct (String.eq_dec _ _); [done|].
+      rewrite <-IHe. f_equal. StringMap.map_solver.
+  - (** Case rec *)
+    destruct (String.eq_dec _ _); simplify_eq.
+    { do 2 f_equal. StringMap.map_solver. }
+    destruct (String.eq_dec _ _); simplify_eq.
+    { do 2 f_equal. StringMap.map_solver. }
+    do 2 f_equal.
+    do 2 rewrite StringMap.delete_insert, String.eq_dec_neq by congruence.
+    rewrite IHe. do 2 f_equal. StringMap.map_solver.
+Qed.
+
+Lemma subst_map_singleton x v e :
+  subst_map (StringMap.singleton x v) e = subst x v e.
+Proof.
+  rewrite <-StringMap.insert_empty, subst_map_insert.
+  by rewrite StringMap.delete_empty, subst_map_empty.
+Qed.
+
+Lemma subst_subst_eq x v1 v2 e :
+  subst x v1 (subst x v2 e) = subst x v2 e.
+Proof.
+  induction e; simpl;
+    repeat (destruct (String.eq_dec _ _); simplify_eq);
+    f_equal; by auto.
+Qed.
+
+Lemma subst_subst_neq x1 x2 v1 v2 e :
+  x1 <> x2 ->
+  subst x1 v1 (subst x2 v2 e) = subst x2 v2 (subst x1 v1 e).
+Proof.
+  intros. induction e; simpl;
+    repeat (destruct (String.eq_dec _ _); simplify_eq);
+    f_equal; by auto.
+Qed.
+
+(* ########################################################################## *)
+(** Defined language constructions: let, sum, pair let *)
+(* ########################################################################## *)
+
+Notation ELet x e1 e2 := (EApp (ELam x e2) e1).
+
+Notation EInjL e := (EPair (EVal (VBool true)) e).
+Notation EInjR e := (EPair (EVal (VBool false)) e).
+
+Notation VInjL v := (VPair (VBool true) v).
+Notation VInjR v := (VPair (VBool false) v).
+
+Definition sum_case :=
+  VClosure "x" (ELam "f1" (ELam "f2"
+    (EIf (EFst (EVar "x"))
+         (EApp (EVar "f1") (ESnd (EVar "x")))
+         (EApp (EVar "f2") (ESnd (EVar "x")))))).
+Notation EMatch e x1 e1 x2 e2 :=
+  (EApp (EApp (EApp (EVal sum_case) e) (ELam x1 e1)) (ELam x2 e2)).
+
+
+Definition pair_elim :=
+  VClosure "x" (ELam "f"
+    (EApp (EApp (EVar "f") (EFst (EVar "x"))) (ESnd (EVar "x")))).
+
+Definition lin_load :=
+  VClosure "l" (EPair (EVar "l") (ELoad (EVar "l"))).
+
+Notation ELetPair x1 x2 e1 e2 :=
+  (EApp (EApp (EVal pair_elim) e1) (ELam x1 (ELam x2 e2))).
+Notation ELinLoad e :=
+  (EApp (EVal lin_load) e).
+
+Opaque wp.
+
+Lemma sepEntails_trans' (P Q R : sepProp) :
+  (Q |~ R) ->
+  (P |~ Q) ->
+  P |~ R.
+Proof.
+  intros ??; by eapply sepEntails_trans.
+Qed.
+
+Lemma Let_wp Phi EPhi x v1 e2 e' :
+  TCSimpl (subst x v1 e2) e' ->
+  wp e' Phi EPhi |~ wp (ELet x (EVal v1) e2) Phi EPhi.
+Proof.
+  iIntros (<-) "Hwp". iApply Lam_wp. by iApply App_wp.
+Qed.
+
+Lemma InjL_wp Phi EPhi v :
+  Phi (VInjL v) |~ wp (EInjL (EVal v)) Phi EPhi.
+Proof.
+  iIntros "HPhi". by iApply Pair_wp.
+Qed.
+
+Lemma InjR_wp Phi EPhi v :
+  Phi (VInjR v) |~ wp (EInjR (EVal v)) Phi EPhi.
+Proof.
+  iIntros "HPhi". by iApply Pair_wp.
+Qed.
+
+Lemma Match_InjL_wp Phi EPhi v x1 e1 x2 e2 e' :
+  TCSimpl (subst x1 v e1) e' ->
+  wp e' Phi EPhi |~ wp (EMatch (EVal (VInjL v)) x1 e1 x2 e2) Phi EPhi.
+Proof.
+  iIntros (<-) "Hwp".
+  iApply App_wp. iApply Lam_wp. iApply Lam_wp.
+  iApply App_wp. iApply Lam_wp. iApply Lam_wp.
+  iApply App_wp. iApply Fst_wp. iApply If_true_wp.
+  iApply Snd_wp. by iApply App_wp. 
+Qed.
+ 
+Lemma Match_InjR_wp Phi EPhi v x1 e1 x2 e2 e' :
+  TCSimpl (subst x2 v e2) e' ->
+  wp e' Phi EPhi |~ wp (EMatch (EVal (VInjR v)) x1 e1 x2 e2) Phi EPhi.
+Proof.
+  iIntros (<-) "Hwp".
+  iApply App_wp. iApply Lam_wp. iApply Lam_wp.
+  iApply App_wp. iApply Lam_wp. iApply Lam_wp.
+  iApply App_wp. iApply Fst_wp. iApply If_false_wp.
+  iApply Snd_wp. by iApply App_wp.
+Qed.
+
+Lemma LetPair_wp Phi EPhi x1 x2 v1 v2 e1 e :
+  TCSimpl (subst x1 v1 (subst x2 v2 e)) e1 -> 
+  wp e1 Phi EPhi |~
+  wp (ELetPair x1 x2 (EVal (VPair v1 v2)) e1) Phi EPhi.
+Proof.
+  iIntros (<-) "Hwp".
+  iApply App_wp. iApply Lam_wp. iApply Lam_wp.
+  iApply App_wp. iApply Fst_wp. iApply App_wp.
+  destruct (String.eq_dec x2 x1) as [->|?].
+  - iApply Lam_wp. iApply Snd_wp. iApply App_wp. 
+    by do 2 rewrite subst_subst_eq.
+  - iApply Lam_wp. iApply Snd_wp. iApply App_wp.
+    rewrite subst_subst_eq. rewrite subst_subst_neq by congruence.
+    by rewrite subst_subst_eq.
+Qed.
+
+Lemma LinLoad_wp Phi EPhi l v :
+  l ~> v ** (l ~> v -** Phi (VPair (VRef l) v)) |~
+  wp (ELinLoad (EVal (VRef l))) Phi EPhi.
+Proof.
+  iIntros "[Hl Hwand]".
+  iApply App_wp. iApply Load_wp. iIntros "{$Hl} Hl".
+  iApply Pair_wp. by iApply "Hwand".
+Qed.
+
+(* ########################################################################## *)
+(** Notations *)
+(* ########################################################################## *)
+
+Module language_notation.
+  Coercion EVar : string >-> expr.
+  Coercion EVal : val >-> expr.
+  Coercion EApp : expr >-> Funclass.
+
+  Notation "'let:' x := e1 'in' e2" := (ELet x e1 e2)
+    (at level 200, x at level 1, e1, e2 at level 200,
+     format "'[' 'let:'  x  :=  '[' e1 ']'  'in'  '/' e2 ']'").
+  Notation "e1 ;; e2" := (ESeq e1 e2)
+    (at level 100, e2 at level 200,
+     format "'[' '[hv' '[' e1 ']' ;;  ']' '/' e2 ']'").
+  Notation "! e" := (ELoad e) (at level 9, right associativity, format "! e").
+  Notation "e1 <- e2" := (EStore e1 e2) (at level 80).
+  Notation "'if:' e1 'then' e2 'else' e3" := (EIf e1 e2 e3)
+    (at level 200, e1, e2, e3 at level 200).
+
+  Notation "'match:' e 'with' 'InjL' x1 => e1 | 'InjR' x2 => e2 'end'" :=
+    (EMatch e x1 e1 x2 e2)
+    (e, x1, e1, x2, e2 at level 200,
+     format "'[hv' 'match:'  e  'with'  '/  ' '[' 'InjL'  x1  =>  '/  ' e1 ']'  '/' '[' |  'InjR'  x2  =>  '/  ' e2 ']'  '/' 'end' ']'").
+  Notation "'match:' e 'with' 'InjR' x1 => e1 | 'InjL' x2 => e2 'end'" :=
+    (EMatch e x2 e2 x1 e1)
+    (e, x1, e1, x2, e2 at level 200, only parsing).
+
+  Notation "fun: x => e" := (ELam x e)
+    (at level 200, x at level 1, e at level 200,
+     format "'[' 'fun:'  x  =>  '/  ' e ']'").
+  Notation "fun: x y .. z => e" := (ELam x (ELam y .. (ELam z e) ..))
+    (at level 200, x, y, z at level 1, e at level 200,
+     format "'[' 'fun:'  x  y  ..  z  =>  '/  ' e ']'").
+  Notation "closure: x => e" := (VClosure x e)
+    (at level 200, x at level 1, e at level 200,
+     format "'[' 'closure:'  x  =>  '/  ' e ']'").
+  Notation "closure: x y .. z => e" := (VClosure x (ELam y .. (ELam z e) ..))
+    (at level 200, x, y, z at level 1, e at level 200,
+     format "'[' 'closure:'  x  y  ..  z  =>  '/  ' e ']'").
+
+  Notation "'rec:' f x => e" := (ERec f x e)
+    (at level 200, f at level 1, x at level 1, e at level 200,
+     format "'[' 'rec:'  f  x  =>  '/  ' e ']'").
+  Notation "'rec:' f x y .. z => e" := (ERec f x (ELam y .. (ELam z e) ..))
+    (at level 200, f, x, y, z at level 1, e at level 200,
+     format "'[' 'rec:'  f  x  y  ..  z  =>  '/  ' e ']'").
+  Notation "'recclosure:' f x => e" := (VRecClosure f x e)
+    (at level 200, f at level 1, x at level 1, e at level 200,
+     format "'[' 'recclosure:'  f  x  =>  '/  ' e ']'").
+  Notation "'recclosure:' f x y .. z => e" :=
+    (VRecClosure f x (ELam y .. (ELam z e) ..))
+    (at level 200, f, x, y, z at level 1, e at level 200,
+     format "'[' 'recclosure:'  f  x  y  ..  z  =>  '/  ' e ']'").
+
+  Notation "e1 +: e2" := (EOp PlusOp e1 e2) (at level 50, left associativity).
+  Notation "e1 -: e2" := (EOp MinusOp e1 e2) (at level 50, left associativity).
+  Notation "e1 =: e2" := (EOp EqOp e1 e2) (at level 70, no associativity).
+  Notation "e1 <=: e2" := (EOp LeOp e1 e2) (at level 70, no associativity).
+  Notation "e1 <: e2" := (EOp LtOp e1 e2) (at level 70, no associativity).
+End language_notation.
+
+Module hoare_notation.
+
+  Notation "'WP' e {{ v , Q } } {{ w , R } }" :=
+    (wp e (fun v => Q) (fun w => R))
+    (at level 20, e, Q, R at level 200,
+     format "'[hv' 'WP'  e  '/' {{  '[' v ,  '/' Q  ']' } }  '/' {{  '[' w ,  '/' R  ']' } } ']'").
+
+  Notation "{{ P } } e {{ v , Q } } {{ w , R } }" :=
+    (hoare P e (fun v => Q) (fun w => R))
+    (at level 20, P, e, Q, R at level 200,
+     format "'[' {{  P  } } ']' '/  '  '[' e ']'  '/' '[' {{  v ,  Q  } } ']'  '/' '[' {{  w ,  R  } } ']'").
+End hoare_notation.
