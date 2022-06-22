@@ -501,7 +501,7 @@ Qed.
 (** Defined language constructs: let, sum, pair let, linear load *)
 (* ########################################################################## *)
 
-Notation ELet x e1 e2 := (EApp (ELam x e2) e1).
+Notation ELet x e1 e2 := (EApp (ELam x e2) e1) (only parsing).
 
 Notation EInjL e := (EPair (EVal (VBool true)) e).
 Notation EInjR e := (EPair (EVal (VBool false)) e).
@@ -515,25 +515,29 @@ Definition sum_case :=
          (EApp (EVar "f1") (ESnd (EVar "x")))
          (EApp (EVar "f2") (ESnd (EVar "x")))))).
 Notation EMatch e x1 e1 x2 e2 :=
-  (EApp (EApp (EApp (EVal sum_case) e) (ELam x1 e1)) (ELam x2 e2)).
+  (EApp (EApp (EApp (EVal sum_case) e) (ELam x1 e1)) (ELam x2 e2))
+  (only parsing).
 
 Definition pair_elim :=
   VClosure "x" (ELam "f"
     (EApp (EApp (EVar "f") (EFst (EVar "x"))) (ESnd (EVar "x")))).
 Notation ELetPair x1 x2 e1 e2 :=
-  (EApp (EApp (EVal pair_elim) e1) (ELam x1 (ELam x2 e2))).
+  (EApp (EApp (EVal pair_elim) e1) (ELam x1 (ELam x2 e2))) (only parsing).
 
 Definition lin_load :=
   VClosure "l" (EPair (EVar "l") (ELoad (EVar "l"))).
-Notation ELinLoad e := (EApp (EVal lin_load) e).
+Notation ELinLoad e := (EApp (EVal lin_load) e) (only parsing).
 
 Opaque wp.
 
-Lemma Let_wp Phi EPhi x v1 e2 e' :
-  TCSimpl (subst x v1 e2) e' ->
-  wp e' Phi EPhi |~ wp (ELet x (EVal v1) e2) Phi EPhi.
+Lemma Let_wp Phi EPhi x e1 e2 Psi :
+  TCSimpl (fun v1 => wp (subst x v1 e2) Phi EPhi) Psi ->
+  wp e1 Psi EPhi |~ wp (ELet x e1 e2) Phi EPhi.
 Proof.
-  iIntros (<-) "Hwp". iApply Lam_wp. by iApply App_wp.
+  iIntros (<-) "Hwp". iApply Lam_wp.
+  iApply (wp_ctx (EApp _)); [constructor |].
+  iApply wp_mono; [| done ..].
+  iIntros (v) "Hwp". by iApply App_wp.
 Qed.
 
 Lemma InjL_wp Phi EPhi v :
@@ -610,7 +614,8 @@ Module language_notation.
 
   Notation "()" := VUnit.
   Notation "( e1 , e2 , .. , en )" := (EPair .. (EPair e1 e2) .. en).
-  Notation "( v1 , v2 , .. , vn )" := (VPair .. (VPair v1 v2) .. vn).
+  Notation "(% v1 , v2 , .. , vn %)" := (VPair .. (VPair v1 v2) .. vn)
+    (format "'[' (%  v1 ,  v2 ,  .. ,  vn  %) ']'").
 
   Notation "'let:' x := e1 'in' e2" := (ELet x e1 e2)
     (at level 200, x at level 1, e1, e2 at level 200,
@@ -618,7 +623,7 @@ Module language_notation.
   Notation "e1 ;; e2" := (ESeq e1 e2)
     (at level 100, e2 at level 200,
      format "'[' '[hv' '[' e1 ']' ;;  ']' '/' e2 ']'").
-  Notation "! e" := (ELoad e) (at level 9, right associativity).
+  Notation "! e" := (ELoad e) (at level 9, right associativity, format "! e").
   Notation "e1 <- e2" := (EStore e1 e2) (at level 80).
   Notation "'if:' e1 'then' e2 'else' e3" := (EIf e1 e2 e3)
     (at level 200, e1, e2, e3 at level 200).
@@ -666,8 +671,9 @@ Module language_notation.
 
   Notation "'let:' ( x1 , x2 ) := e1 'in' e2" := (ELetPair x1 x2 e1 e2)
     (at level 200, x1, x2 at level 1, e1, e2 at level 200,
-     format "'[' 'let:'  ( x1 , x2 )  :=  '[' e1 ']'  'in'  '/' e2 ']'").
-  Notation "!! e" := (ELinLoad e) (at level 9, right associativity).
+     format "'[' 'let:'  ( x1 ,  x2 )  :=  '[' e1 ']'  'in'  '/' e2 ']'").
+  Notation "!! e" := (ELinLoad e)
+    (at level 9, right associativity, format "!! e").
 
   Notation NONE := (EInjL (EVal VUnit)) (only parsing).
   Notation NONEV := (VInjL VUnit) (only parsing).
@@ -681,13 +687,13 @@ Module language_notation.
 End language_notation.
 
 Module hoare_notation.
-  Notation "'WP' e {{ v , Q } } {{ t w , R } }" :=
+  Notation "'WP' e {{ v , Q }} {{ t w , R }}" :=
     (wp e (fun v => Q) (fun t w => R))
-    (at level 20, e, Q, R at level 200,
-     format "'[hv' 'WP'  e  '/' {{  '[' v ,  '/' Q  ']' } }  '/' {{  '[' t w ,  '/' R  ']' } } ']'").
+    (at level 20, e, Q, R at level 200, v name, t name, w name,
+     format "'[hv' 'WP'  e  '/' {{  '[' v ,  '/' Q  ']' }}  '/' {{  '[' t  w ,  '/' R  ']' }} ']'").
 
-  Notation "{{ P } } e {{ v , Q } } {{ t w , R } }" :=
+  Notation "{{ P }} e {{ v , Q }} {{ t w , R }}" :=
     (hoare P e (fun v => Q) (fun t w => R))
-    (at level 20, P, e, Q, R at level 200,
-     format "'[' {{  P  } } ']' '/  '  '[' e ']'  '/' '[' {{  v ,  Q  } } ']'  '/' '[' {{  t w ,  R  } } ']'").
+    (at level 20, P, e, Q, R at level 200, v name, t name, w name,
+     format "'[hv' {{  P  }} ']' '/  '  '[' e ']'  '/' '[' {{  v ,  Q  }} ']'  '/' '[' {{  t  w ,  R  }} ']'").
 End hoare_notation.

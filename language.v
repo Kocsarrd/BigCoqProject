@@ -434,12 +434,15 @@ Proof.
   edestruct Hwp as (?&?&?&?&?); eauto 6 using big_step.
 Qed.
 
-Lemma Seq_wp Phi EPhi v e :
-  wp e Phi EPhi |~ wp (ESeq (EVal v) e) Phi EPhi.
+Lemma Seq_wp Phi EPhi e1 e2 :
+  wp e1 (fun _ => wp e2 Phi EPhi) EPhi |~ wp (ESeq e1 e2) Phi EPhi.
 Proof.
-  intros h Hwp hf Hdisj.
-  edestruct Hwp as (vret & h' & Hdisj' & Hbs & HPost); [done|].
-  eauto 6 using big_step.
+  intros h He1 hf Hdisj.
+  edestruct He1 as (r1 & h1 & Hdisj1 & Hbig1 & Hr1); [done |].
+  destruct r1 as [v1 | t v1]; simpl in Hr1.
+  - edestruct Hr1 as (r2 & h2 & Hdisj2 & Hbig2 & Hr2); [done |].
+    eauto 6 using big_step.
+  - eauto 6 using big_step.
 Qed.
 
 Lemma Alloc_wp Phi EPhi v :
