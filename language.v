@@ -249,6 +249,7 @@ Ltac inv_big :=
   repeat match goal with
   | _ => progress simplify_eq
   | H : big_step (EVal _) _ _ _ |- _ => inv H
+  | H : big_step (EVar _) _ _ _ |- _ => inv H
   | H : big_step (ELam _ _) _ _ _ |- _ => inv H
   | H : big_step (ERec _ _ _) _ _ _ |- _ => inv H
   | H : big_step (EApp _ _) _ _ _ |- _ => inv H
@@ -458,7 +459,7 @@ Qed.
 
 Lemma Store_wp Phi EPhi l v w :
   l ~> v ** (l ~> w -** Phi (VRef l)) |~
-    wp (EStore (EVal (VRef l)) (EVal w)) Phi EPhi.
+  wp (EStore (EVal (VRef l)) (EVal w)) Phi EPhi.
 Proof.
   intros h (h1 & h2 & -> & Hdisj & -> & Hwand) hf Hdisj'.
   apply disjoint_singleton in Hdisj.
@@ -535,4 +536,3 @@ Proof.
       exists r2, h2. eauto using big_step.
     + exists (ex t' v1), h1. eauto using big_step.
 Qed.
-
