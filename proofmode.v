@@ -597,10 +597,20 @@ Qed.
 (** Notations *)
 (* ########################################################################## *)
 
+Notation "'TRUE'" := sepTrue.
+Notation "'FALSE'" := sepFalse.
+
 Module language_notation.
+  Coercion VNat : nat >-> val.
+  Coercion VBool : bool >-> val.
+
   Coercion EVar : string >-> expr.
   Coercion EVal : val >-> expr.
   Coercion EApp : expr >-> Funclass.
+
+  Notation "()" := VUnit.
+  Notation "( e1 , e2 , .. , en )" := (EPair .. (EPair e1 e2) .. en).
+  Notation "( v1 , v2 , .. , vn )" := (VPair .. (VPair v1 v2) .. vn).
 
   Notation "'let:' x := e1 'in' e2" := (ELet x e1 e2)
     (at level 200, x at level 1, e1, e2 at level 200,
@@ -613,11 +623,11 @@ Module language_notation.
   Notation "'if:' e1 'then' e2 'else' e3" := (EIf e1 e2 e3)
     (at level 200, e1, e2, e3 at level 200).
 
-  Notation "'match:' e 'with' 'InjL' x1 => e1 | 'InjR' x2 => e2 'end'" :=
+  Notation "'match:' e 'with' | 'InjL' x1 => e1 | 'InjR' x2 => e2 'end'" :=
     (EMatch e x1 e1 x2 e2)
     (e, x1, e1, x2, e2 at level 200,
-     format "'[hv' 'match:'  e  'with'  '/  ' '[' 'InjL'  x1  =>  '/  ' e1 ']'  '/' '[' |  'InjR'  x2  =>  '/  ' e2 ']'  '/' 'end' ']'").
-  Notation "'match:' e 'with' 'InjR' x1 => e1 | 'InjL' x2 => e2 'end'" :=
+     format "'[hv' 'match:'  e  'with'  '/  ' '[' |  'InjL'  x1  =>  '/  ' e1 ']'  '/' '[' |  'InjR'  x2  =>  '/  ' e2 ']'  '/' 'end' ']'").
+  Notation "'match:' e 'with' | 'InjR' x1 => e1 | 'InjL' x2 => e2 'end'" :=
     (EMatch e x2 e2 x1 e1)
     (e, x1, e1, x2, e2 at level 200, only parsing).
 
@@ -658,16 +668,26 @@ Module language_notation.
     (at level 200, x1, x2 at level 1, e1, e2 at level 200,
      format "'[' 'let:'  ( x1 , x2 )  :=  '[' e1 ']'  'in'  '/' e2 ']'").
   Notation "!! e" := (ELinLoad e) (at level 9, right associativity).
+
+  Notation NONE := (EInjL (EVal VUnit)) (only parsing).
+  Notation NONEV := (VInjL VUnit) (only parsing).
+  Notation SOME e := (EInjR e) (only parsing).
+  Notation SOMEV v := (VInjR v) (only parsing).
+
+  Notation "'match:' e 'with' | 'NONE' => e1 | 'SOME' x => e2 'end'" :=
+    (EMatch e "_" e1 x e2) (e, e1, x, e2 at level 200, only parsing).
+  Notation "'match:' e 'with' | 'SOME' x => e1 | 'NONE' => e2 'end'" :=
+    (EMatch e "_" e2 x e1) (e, e1, x, e2 at level 200, only parsing).
 End language_notation.
 
 Module hoare_notation.
-  Notation "'WP' e {{ v , Q } } {{ w , R } }" :=
-    (wp e (fun v => Q) (fun w => R))
+  Notation "'WP' e {{ v , Q } } {{ t w , R } }" :=
+    (wp e (fun v => Q) (fun t w => R))
     (at level 20, e, Q, R at level 200,
-     format "'[hv' 'WP'  e  '/' {{  '[' v ,  '/' Q  ']' } }  '/' {{  '[' w ,  '/' R  ']' } } ']'").
+     format "'[hv' 'WP'  e  '/' {{  '[' v ,  '/' Q  ']' } }  '/' {{  '[' t w ,  '/' R  ']' } } ']'").
 
-  Notation "{{ P } } e {{ v , Q } } {{ w , R } }" :=
-    (hoare P e (fun v => Q) (fun w => R))
+  Notation "{{ P } } e {{ v , Q } } {{ t w , R } }" :=
+    (hoare P e (fun v => Q) (fun t w => R))
     (at level 20, P, e, Q, R at level 200,
-     format "'[' {{  P  } } ']' '/  '  '[' e ']'  '/' '[' {{  v ,  Q  } } ']'  '/' '[' {{  w ,  R  } } ']'").
+     format "'[' {{  P  } } ']' '/  '  '[' e ']'  '/' '[' {{  v ,  Q  } } ']'  '/' '[' {{  t w ,  R  } } ']'").
 End hoare_notation.

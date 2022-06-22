@@ -5,7 +5,6 @@ Import NatMap.
 Definition tag := unit.
 Definition tag_dec (x y : tag) : {x = y} + {x <> y}.
 Proof. decide equality. Defined.
-Opaque tag tag_dec.
 
 Inductive bin_op :=
   | PlusOp
