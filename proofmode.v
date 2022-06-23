@@ -540,6 +540,13 @@ Proof.
   iIntros (v) "Hwp". by iApply App_wp.
 Qed.
 
+Lemma Let_Val_wp Phi EPhi x v1 e2 e' :
+  TCSimpl (subst x v1 e2) e' ->
+  wp e' Phi EPhi |~ wp (ELet x (EVal v1) e2) Phi EPhi.
+Proof.
+  iIntros (<-) "Hwp". iApply Let_wp. by iApply Val_wp.
+Qed.
+
 Lemma InjL_wp Phi EPhi v :
   Phi (VInjL v) |~ wp (EInjL (EVal v)) Phi EPhi.
 Proof.
@@ -616,6 +623,8 @@ Module language_notation.
   Notation "( e1 , e2 , .. , en )" := (EPair .. (EPair e1 e2) .. en).
   Notation "(% v1 , v2 , .. , vn %)" := (VPair .. (VPair v1 v2) .. vn)
     (format "'[' (%  v1 ,  v2 ,  .. ,  vn  %) ']'").
+  Notation "'fst' e" := (EFst e) (at level 10).
+  Notation "'snd' e" := (ESnd e) (at level 10).
 
   Notation "'let:' x := e1 'in' e2" := (ELet x e1 e2)
     (at level 200, x at level 1, e1, e2 at level 200,
@@ -623,8 +632,10 @@ Module language_notation.
   Notation "e1 ;; e2" := (ESeq e1 e2)
     (at level 100, e2 at level 200,
      format "'[' '[hv' '[' e1 ']' ;;  ']' '/' e2 ']'").
+  Notation "'alloc' e" := (EAlloc e) (at level 10).
   Notation "! e" := (ELoad e) (at level 9, right associativity, format "! e").
   Notation "e1 <- e2" := (EStore e1 e2) (at level 80).
+  Notation "'free' e" := (EFree e) (at level 10).
   Notation "'if:' e1 'then' e2 'else' e3" := (EIf e1 e2 e3)
     (at level 200, e1, e2, e3 at level 200).
 
@@ -668,6 +679,12 @@ Module language_notation.
   Notation "e1 =: e2" := (EOp EqOp e1 e2) (at level 70, no associativity).
   Notation "e1 <=: e2" := (EOp LeOp e1 e2) (at level 70, no associativity).
   Notation "e1 <: e2" := (EOp LtOp e1 e2) (at level 70, no associativity).
+
+  Notation "'throw' t e" := (EThrow t e)
+    (at level 10, t at level 1).
+  Notation "e1 'catch:' t x => e2" := (ECatch e1 t (ELam x e2))
+    (at level 90, t, x at level 1, e2 at level 200, left associativity,
+     format "'[hv' e1  '/  ' 'catch:'  t  x  =>  '/  ' e2 ']'").
 
   Notation "'let:' ( x1 , x2 ) := e1 'in' e2" := (ELetPair x1 x2 e1 e2)
     (at level 200, x1, x2 at level 1, e1, e2 at level 200,

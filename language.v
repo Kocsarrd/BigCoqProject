@@ -4,7 +4,10 @@ Import NatMap.
 
 Definition tag := unit.
 Definition tag_dec (x y : tag) : {x = y} + {x <> y}.
-Proof. decide equality. Defined.
+Proof. decide equality. Qed.
+Lemma tag_dec_eq {B} (y1 y2 : B) x :
+  (if tag_dec x x then y1 else y2) = y1.
+Proof. by destruct (tag_dec x x). Qed.
 
 Inductive bin_op :=
   | PlusOp
@@ -443,6 +446,14 @@ Proof.
   - edestruct Hr1 as (r2 & h2 & Hdisj2 & Hbig2 & Hr2); [done |].
     eauto 6 using big_step.
   - eauto 6 using big_step.
+Qed.
+
+Lemma Seq_Val_wp Phi EPhi v1 e2 :
+  wp e2 Phi EPhi |~ wp (ESeq (EVal v1) e2) Phi EPhi.
+Proof.
+  eapply sepEntails_trans; [| apply Seq_wp].
+  eapply sepEntails_trans; [| apply Val_wp].
+  apply sepEntails_refl.
 Qed.
 
 Lemma Alloc_wp Phi EPhi v :
