@@ -2,6 +2,13 @@ From iris.proofmode Require Export tactics.
 From pv Require Export language.
 
 (* ########################################################################## *)
+(** Separation logic notations *)
+(* ########################################################################## *)
+
+Notation "'TRUE'" := sepTrue.
+Notation "'FALSE'" := sepFalse.
+
+(* ########################################################################## *)
 (** Make the proof mode work *)
 (* ########################################################################## *)
 
@@ -439,7 +446,7 @@ Fixpoint subst_map (vs : stringmap val) (e : expr) : expr :=
   | ELoad e => ELoad (subst_map vs e)
   | EFree e => EFree (subst_map vs e)
   | EThrow t e => EThrow t (subst_map vs e)
-  | ECatch e1 t e2 => ECatch (subst_map vs e1) t (subst_map vs e2)
+  | ECatch e1 t A e2 => ECatch (subst_map vs e1) t A (subst_map vs e2)
   end.
 
 Lemma subst_map_empty e :
@@ -495,6 +502,22 @@ Proof.
   intros. induction e; simpl;
     repeat (destruct (String.eq_dec _ _); simplify_eq);
     f_equal; by auto.
+Qed.
+
+(* ########################################################################## *)
+(** Helper lemmas about wp *)
+(* ########################################################################## *)
+
+Lemma wp_absorb Phi EPhi P e R :
+  (P |~ wp e (fun v => Phi v ** TRUE) (fun t v => EPhi t v ** TRUE)) ->
+  P ** R |~ wp e (fun v => Phi v ** TRUE) (fun t v => EPhi t v ** TRUE).
+Proof.
+  intros H.
+  eapply sepEntails_trans; [by apply sepSep_mono_l |].
+  eapply sepEntails_trans; [apply wp_frame |].
+  apply wp_mono.
+  - iStartProof; iIntros (v) "[[? ?] ?]". by iFrame.
+  - iStartProof; iIntros (t v) "[[? ?] ?]". by iFrame.
 Qed.
 
 (* ########################################################################## *)
@@ -607,9 +630,6 @@ Qed.
 (* ########################################################################## *)
 (** Notations *)
 (* ########################################################################## *)
-
-Notation "'TRUE'" := sepTrue.
-Notation "'FALSE'" := sepFalse.
 
 Module language_notation.
   Coercion VNat : nat >-> val.

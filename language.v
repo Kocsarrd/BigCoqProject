@@ -16,6 +16,17 @@ Inductive bin_op :=
   | LtOp
   | EqOp.
 
+Inductive ty :=
+  | TUnit : ty
+  | TNat : ty
+  | TBool : ty
+  | TMoved : ty
+  | TRef : ty -> ty
+  | TProd : ty -> ty -> ty
+  | TSum : ty -> ty -> ty
+  | TFun : ty -> ty -> ty
+  | TFunOnce : ty -> ty -> ty.
+
 Inductive expr :=
   | EVal : val -> expr
   | EVar : string -> expr
@@ -33,7 +44,7 @@ Inductive expr :=
   | EStore : expr -> expr -> expr
   | EFree : expr -> expr
   | EThrow : tag -> expr -> expr
-  | ECatch : expr -> tag -> expr -> expr
+  | ECatch : expr -> tag -> ty -> expr -> expr
 with val :=
   | VClosure : string -> expr -> val
   | VRecClosure : string -> string -> expr -> val
@@ -63,7 +74,7 @@ Fixpoint subst (x : string) (w : val) (e : expr) : expr :=
   | ELoad e => ELoad (subst x w e)
   | EFree e => EFree (subst x w e)
   | EThrow t e => EThrow t (subst x w e)
-  | ECatch e1 t e2 => ECatch (subst x w e1) t (subst x w e2)
+  | ECatch e1 t A e2 => ECatch (subst x w e1) t A (subst x w e2)
   end.
 
 Definition eval_bin_op (op : bin_op) (v1 v2 : val) : option val :=
@@ -199,17 +210,17 @@ Inductive big_step : expr -> heap -> res -> heap -> Prop :=
   | Throw_big_step_ex h1 h2 e t t' v :
       big_step e h1 (ex t' v) h2 ->
       big_step (EThrow t e) h1 (ex t' v) h2
-  | Catch_big_step h1 h2 e1 e2 t v1 :
+  | Catch_big_step h1 h2 e1 e2 t A v1 :
       big_step e1 h1 (ok v1) h2 ->
-      big_step (ECatch e1 t e2) h1 (ok v1) h2
-  | Catch_big_step_ex_1 h1 h2 h3 e1 e2 t v1 r :
+      big_step (ECatch e1 t A e2) h1 (ok v1) h2
+  | Catch_big_step_ex_1 h1 h2 h3 e1 e2 t A v1 r :
       big_step e1 h1 (ex t v1) h2 ->
       big_step (EApp e2 (EVal v1)) h2 r h3 ->
-      big_step (ECatch e1 t e2) h1 r h3
-  | Catch_big_step_ex_2 h1 h2 e1 e2 t t' v1 :
+      big_step (ECatch e1 t A e2) h1 r h3
+  | Catch_big_step_ex_2 h1 h2 e1 e2 t t' A v1 :
       big_step e1 h1 (ex t' v1) h2 ->
       t <> t' ->
-      big_step (ECatch e1 t e2) h1 (ex t' v1) h2.
+      big_step (ECatch e1 t A e2) h1 (ex t' v1) h2.
 
 Inductive ctx : (expr -> expr) -> Prop :=
   | App_l_ctx e2 : ctx (fun x => EApp x e2)
@@ -266,7 +277,7 @@ Ltac inv_big :=
   | H : big_step (EStore _ _) _ _ _ |- _ => inv H
   | H : big_step (EFree _) _ _ _ |- _ => inv H
   | H : big_step (EThrow _ _) _ _ _ |- _ => inv H
-  | H : big_step (ECatch _ _ _) _ _ _ |- _ => inv H
+  | H : big_step (ECatch _ _ _ _) _ _ _ |- _ => inv H
   end.
 
 Class TCSimpl {A} (x x' : A) := tc_simpl : x = x'.
@@ -537,8 +548,8 @@ Qed.
 Notation catch_ex_cond Phi EPhi t e2 := (fun t' v =>
   if tag_dec t t' then wp (EApp e2 (EVal v)) Phi EPhi else EPhi t' v).
 
-Lemma Catch_wp Phi EPhi e1 t e2 :
-  wp e1 Phi (catch_ex_cond Phi EPhi t e2) |~ wp (ECatch e1 t e2) Phi EPhi.
+Lemma Catch_wp Phi EPhi e1 t A e2 :
+  wp e1 Phi (catch_ex_cond Phi EPhi t e2) |~ wp (ECatch e1 t A e2) Phi EPhi.
 Proof.
   intros h He1 hf Hdisj.
   edestruct He1 as (r1 & h1 & Hdisj1 & Hbig & Hr1); [done |].
