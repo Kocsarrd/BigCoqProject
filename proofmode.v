@@ -509,8 +509,8 @@ Qed.
 (* ########################################################################## *)
 
 Lemma wp_absorb Phi EPhi P e R :
-  (P |~ wp e (fun v => Phi v ** TRUE) (fun t v => EPhi t v ** TRUE)) ->
-  P ** R |~ wp e (fun v => Phi v ** TRUE) (fun t v => EPhi t v ** TRUE).
+  (P ->> wp e (fun v => Phi v ** TRUE) (fun t v => EPhi t v ** TRUE)) ->>
+  P ** R ->> wp e (fun v => Phi v ** TRUE) (fun t v => EPhi t v ** TRUE).
 Proof.
   intros H.
   eapply sepEntails_trans; [by apply sepSep_mono_l |].
