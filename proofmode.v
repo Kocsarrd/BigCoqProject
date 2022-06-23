@@ -505,19 +505,33 @@ Proof.
 Qed.
 
 (* ########################################################################## *)
-(** Helper lemmas about wp *)
+(** Helper lemmas for wp logic *)
 (* ########################################################################## *)
 
-Lemma wp_absorb Phi EPhi P e R :
-  (P ->> wp e (fun v => Phi v ** TRUE) (fun t v => EPhi t v ** TRUE)) ->>
-  P ** R ->> wp e (fun v => Phi v ** TRUE) (fun t v => EPhi t v ** TRUE).
+Opaque wp.
+
+Lemma Seq_Val_wp Phi EPhi v1 e2 :
+  wp e2 Phi EPhi |~ wp (ESeq (EVal v1) e2) Phi EPhi.
 Proof.
-  intros H.
-  eapply sepEntails_trans; [by apply sepSep_mono_l |].
-  eapply sepEntails_trans; [apply wp_frame |].
-  apply wp_mono.
-  - iStartProof; iIntros (v) "[[? ?] ?]". by iFrame.
-  - iStartProof; iIntros (t v) "[[? ?] ?]". by iFrame.
+  iIntros "He2". iApply Seq_wp. by iApply Val_wp.
+Qed.
+
+Lemma Throw_Val_wp Phi EPhi t v :
+  EPhi t v |~ wp (EThrow t (EVal v)) Phi EPhi.
+Proof.
+  iIntros "HEPhi". iApply Throw_wp. by iApply Val_wp.
+Qed.
+
+Lemma Catch_Lam_wp Phi EPhi e1 t A x e2 EPhi' :
+  TCSimpl (fun t' v1 => if tag_dec t t'
+                          then wp (subst x v1 e2) Phi EPhi
+                          else EPhi t' v1) EPhi' ->
+  wp e1 Phi EPhi' |~ wp (ECatch e1 t A (ELam x e2)) Phi EPhi.
+Proof.
+  iIntros (<-) "He1". iApply Catch_wp.
+  iApply wp_mono; [done | | done]; iIntros (t' v1) "Hwp"; simpl.
+  destruct (tag_dec t t') as [<- | ?]; [| done].
+  iApply Lam_wp. by iApply App_wp.
 Qed.
 
 (* ########################################################################## *)
@@ -553,9 +567,9 @@ Notation ELinLoad e := (EApp (EVal lin_load) e) (only parsing).
 
 Opaque wp.
 
-Lemma Let_wp Phi EPhi x e1 e2 Psi :
-  TCSimpl (fun v1 => wp (subst x v1 e2) Phi EPhi) Psi ->
-  wp e1 Psi EPhi |~ wp (ELet x e1 e2) Phi EPhi.
+Lemma Let_wp Phi EPhi x e1 e2 Phi' :
+  TCSimpl (fun v1 => wp (subst x v1 e2) Phi EPhi) Phi' ->
+  wp e1 Phi' EPhi |~ wp (ELet x e1 e2) Phi EPhi.
 Proof.
   iIntros (<-) "Hwp". iApply Lam_wp.
   iApply (wp_ctx (EApp _)); [constructor |].

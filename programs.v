@@ -104,11 +104,11 @@ Lemma main_spec l :
 Proof.
   iIntros "_". iApply App_wp. iApply Let_wp.
   iApply (alloc_list_spec with "[//]"); iSplit.
-  - iIntros (v) "Hv". iApply Catch_wp. iApply Seq_wp.
+  - iIntros (v) "Hv". iApply Catch_Lam_wp. iApply Seq_wp.
     iApply (dec_list_spec with "Hv"); iSplit.
     + iIntros (?) "(% & %Hl & Hv)". iApply Val_wp. eauto with iFrame.
     + iIntros (t ?) "(-> & % & %l1 & %l2 & -> & %Hl1 & Hv)".
-      rewrite tag_dec_eq. iApply Let_Val_wp. iApply Val_wp. eauto with iFrame.
+      rewrite tag_dec_eq. iApply Val_wp. eauto with iFrame.
   - by iIntros (??) "?".
 Qed.
 

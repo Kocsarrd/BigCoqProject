@@ -459,14 +459,6 @@ Proof.
   - eauto 6 using big_step.
 Qed.
 
-Lemma Seq_Val_wp Phi EPhi v1 e2 :
-  wp e2 Phi EPhi |~ wp (ESeq (EVal v1) e2) Phi EPhi.
-Proof.
-  eapply sepEntails_trans; [| apply Seq_wp].
-  eapply sepEntails_trans; [| apply Val_wp].
-  apply sepEntails_refl.
-Qed.
-
 Lemma Alloc_wp Phi EPhi v :
   (All l, l ~> v -** Phi (VRef l)) |~ wp (EAlloc (EVal v)) Phi EPhi.
 Proof.
@@ -479,6 +471,20 @@ Proof.
          by map_solver. eauto using big_step.
   - apply H; [| done]. rewrite disjoint_singleton; subst l.
     apply lookup_fresh_incl, incl_union_l.
+Qed.
+
+Lemma Load_wp Phi EPhi l v :
+  l ~> v ** (l ~> v -** Phi v) |~ wp (ELoad (EVal (VRef l))) Phi EPhi.
+Proof.
+  intros h (h1 & h2 & -> & Hdisj & -> & Hwand) hf Hdisj'.
+  apply disjoint_singleton in Hdisj.
+  apply disjoint_union in Hdisj' as [??].
+  apply disjoint_singleton in H.
+  exists (ok v), (union (singleton l v) h2); split.
+  { apply disjoint_union; split; [|done]. by apply disjoint_singleton. }
+  split.
+  { eapply Load_big_step; eauto using big_step. map_solver. }
+  apply Hwand; [|done]. by apply disjoint_singleton.
 Qed.
 
 Lemma Store_wp Phi EPhi l v w :
@@ -498,20 +504,6 @@ Proof.
     eapply Store_big_step; eauto using big_step.
     map_solver.
   }
-  apply Hwand; [|done]. by apply disjoint_singleton.
-Qed.
-
-Lemma Load_wp Phi EPhi l v :
-  l ~> v ** (l ~> v -** Phi v) |~ wp (ELoad (EVal (VRef l))) Phi EPhi.
-Proof.
-  intros h (h1 & h2 & -> & Hdisj & -> & Hwand) hf Hdisj'.
-  apply disjoint_singleton in Hdisj.
-  apply disjoint_union in Hdisj' as [??].
-  apply disjoint_singleton in H. 
-  exists (ok v), (union (singleton l v) h2); split.
-  { apply disjoint_union; split; [|done]. by apply disjoint_singleton. }
-  split.
-  { eapply Load_big_step; eauto using big_step. map_solver. }
   apply Hwand; [|done]. by apply disjoint_singleton.
 Qed.
 
@@ -537,19 +529,11 @@ Proof.
   - exists (ex t' v), h'. eauto using big_step.
 Qed.
 
-Lemma Throw_Val_wp Phi EPhi t v :
-  EPhi t v |~ wp (EThrow t (EVal v)) Phi EPhi.
-Proof.
-  eapply sepEntails_trans; [| apply Throw_wp].
-  eapply sepEntails_trans; [| apply Val_wp].
-  apply sepEntails_refl.
-Qed.
-
-Notation catch_ex_cond Phi EPhi t e2 := (fun t' v =>
-  if tag_dec t t' then wp (EApp e2 (EVal v)) Phi EPhi else EPhi t' v).
-
 Lemma Catch_wp Phi EPhi e1 t A e2 :
-  wp e1 Phi (catch_ex_cond Phi EPhi t e2) |~ wp (ECatch e1 t A e2) Phi EPhi.
+  wp e1 Phi (fun t' v1 => if tag_dec t t'
+                            then wp (EApp e2 (EVal v1)) Phi EPhi
+                            else EPhi t' v1) |~
+  wp (ECatch e1 t A e2) Phi EPhi.
 Proof.
   intros h He1 hf Hdisj.
   edestruct He1 as (r1 & h1 & Hdisj1 & Hbig & Hr1); [done |].
