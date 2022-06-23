@@ -702,9 +702,9 @@ Module language_notation.
 
   Notation "'throw' t e" := (EThrow t e)
     (at level 10, t at level 1).
-  Notation "e1 'catch:' t x => e2" := (ECatch e1 t (ELam x e2))
-    (at level 90, t, x at level 1, e2 at level 200, left associativity,
-     format "'[hv' e1  '/  ' 'catch:'  t  x  =>  '/  ' e2 ']'").
+  Notation "e1 'catch:' t A x => e2" := (ECatch e1 t A (ELam x e2))
+    (at level 90, t, A, x at level 1, e2 at level 90, left associativity,
+     format "'[hv' e1  '/  ' 'catch:'  t  A  x  =>  '/  ' e2 ']'").
 
   Notation "'let:' ( x1 , x2 ) := e1 'in' e2" := (ELetPair x1 x2 e1 e2)
     (at level 200, x1, x2 at level 1, e1, e2 at level 200,

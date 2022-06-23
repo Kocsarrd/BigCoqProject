@@ -29,7 +29,7 @@ Definition main (l : list nat) : val :=
   closure: "_" =>
     let: "l" := alloc_list l () in
     (dec_list "l";; "l")
-      catch: tt "_" => "l".
+      catch: tt TUnit "_" => "l".
 
 Fixpoint is_list (l : list nat) (v : val) : sepProp :=
   match l with
