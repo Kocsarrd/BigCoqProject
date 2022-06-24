@@ -600,13 +600,23 @@ Definition terminates (e : expr) :Prop :=
 Section wp_adequacy.
   Transparent sepEntails.
 
-  Lemma wp_adequacy phi ephi e :
-    (EMP |~ wp e (fun v => @[ phi v ]) (fun t v => @[ ephi t v ])) ->
-    exists r h, big_step e NatMap.empty r h /\ (phi # ephi) r.
-  Proof. Admitted.
+  Lemma wp_adequacy Phi EPhi e :
+    (EMP |~ wp e Phi EPhi) ->
+    exists r h, big_step e NatMap.empty r h /\ (Phi # EPhi) r h.
+  Proof.
+    unfold sepEntails, wp; intros H.
+    edestruct H as (r & h & _ & Hbig & HPost).
+    { done. }
+    { apply (NatMap.disjoint_empty NatMap.empty). }
+    rewrite !NatMap.union_empty_r in Hbig. eauto.
+  Qed.
 End wp_adequacy.
 
 Lemma type_soundness e A :
   typed [] e A ->
   terminates e.
-Proof. Admitted.
+Proof.
+  unfold typed, terminates; simpl; intros He.
+  specialize (He StringMap.empty). rewrite subst_map_empty in He.
+  apply wp_adequacy in He as (r & h & Hbig & _). eauto.
+Qed.
