@@ -1,7 +1,6 @@
 From pv Require Import proofmode.
 
-Definition EPhi (t : tag) (v : val) : sepProp :=
-  (Ex n, @[ v = VNat n ]) ** TRUE.
+Definition TEx (t : tag) (v : val) : sepProp := Ex n, @[ v = VNat n ].
 
 Definition ty := val -> sepProp.
 
@@ -9,32 +8,23 @@ Definition TUnit : ty := fun v => @[ v = VUnit ].
 Definition TNat : ty := fun v => Ex n, @[ v = VNat n ].
 Definition TBool : ty := fun v => Ex b, @[ v = VBool b ].
 Definition TMoved : ty := fun v => EMP.
+
 Definition TRef (A : ty) : ty := fun v =>
   Ex l w, @[ v = VRef l ] ** l ~> w ** A w.
+
 Definition TProd (A1 A2 : ty) : ty := fun v =>
   Ex w1 w2, @[ v = VPair w1 w2 ] ** A1 w1 ** A2 w2.
 Definition TSum (A1 A2 : ty) : ty := fun v =>
   Ex w, (@[ v = VInjL w ] ** A1 w) \// (@[ v = VInjR w] ** A2 w).
-Definition TFun (A1 A2 : ty) : ty := fun v =>
-  @[ forall w, A1 w |~ wp (EApp (EVal v) (EVal w)) A2 EPhi ].
-Definition TFunOnce (A1 A2 : ty) : ty := fun v =>
-  All w, A1 w -** wp (EApp (EVal v) (EVal w)) A2 EPhi.
 
-(** Intuitively, contexts are multisets of bindings (since variables can occur
-multiple times). We formalize contexts in Coq as lists. The lemma [subctx_swap]
-below shows that the order does not matter. *)
+Definition TFun (A1 A2 : ty) : ty := fun v =>
+  @[ forall w, A1 w |~ wp (EApp (EVal v) (EVal w)) (abs1 A2) (abs2 TEx) ].
+Definition TFunOnce (A1 A2 : ty) : ty := fun v =>
+  All w, A1 w -** wp (EApp (EVal v) (EVal w)) (abs1 A2) (abs2 TEx).
 
 Notation ty_ctx := (list (string * ty)).
 
-(** The domain of the context. *)
-
 Definition ctx_dom : ty_ctx -> list string := map fst.
-
-(** Similar to week 6, we define semantic typing for contexts,
-[ctx_typed Gamma vs] to say that all the variables in an environment [vs] have
-types given by the type context [Gamma]. Since our types are predicates in
-separation logic, [ctx_typed] is a [sepProp]. We use the separating conjunction
-to ensure the ownership of all variables in the context is separate. *)
 
 Fixpoint ctx_typed (Gamma : ty_ctx) (vs : stringmap val) : sepProp :=
   match Gamma with
@@ -47,14 +37,14 @@ Fixpoint ctx_typed (Gamma : ty_ctx) (vs : stringmap val) : sepProp :=
 Fixpoint subst_map (vs : stringmap val) (e : expr) : expr :=
   match e with
   | EVal _ => e
-  | EVar y =>
-     match StringMap.lookup vs y with
-     | Some v => EVal v
-     | None => e
-     end
-  | ELam y e => ELam y (subst_map (StringMap.delete y vs) e)
-  | ERec f y e =>
-     ERec f y (subst_map (StringMap.delete y (StringMap.delete f vs)) e)
+  | EVar x =>
+      match StringMap.lookup vs x with
+      | Some v => EVal v
+      | None => e
+      end
+  | ELam x e => ELam x (subst_map (StringMap.delete x vs) e)
+  | ERec f x e =>
+      ERec f x (subst_map (StringMap.delete x (StringMap.delete f vs)) e)
   | EApp e1 e2 => EApp (subst_map vs e1) (subst_map vs e2)
   | EOp op e1 e2 => EOp op (subst_map vs e1) (subst_map vs e2)
   | EPair e1 e2 => EPair (subst_map vs e1) (subst_map vs e2)
@@ -63,38 +53,24 @@ Fixpoint subst_map (vs : stringmap val) (e : expr) : expr :=
   | EIf e1 e2 e3 => EIf (subst_map vs e1) (subst_map vs e2) (subst_map vs e3)
   | ESeq e1 e2 => ESeq (subst_map vs e1) (subst_map vs e2)
   | EAlloc e => EAlloc (subst_map vs e)
-  | EStore e1 e2 => EStore (subst_map vs e1) (subst_map vs e2)
   | ELoad e => ELoad (subst_map vs e)
+  | EStore e1 e2 => EStore (subst_map vs e1) (subst_map vs e2)
   | EFree e => EFree (subst_map vs e)
   | EThrow t e => EThrow t (subst_map vs e)
   | ECatch e1 t e2 => ECatch (subst_map vs e1) t (subst_map vs e2)
   end.
 
-(** The semantic typing judgments are defined similarly to the ones from week 6,
-but using separation logic entailment [|~] instead of a Coq implication. *)
-
 Definition val_typed (v : val) (A : ty) : Prop :=
-  TRUE |~ A v ** TRUE.
+  EMP |~ A v.
 
 Definition typed (Gamma : ty_ctx) (e : expr) (A : ty) : Prop :=
-  forall vs,
-    ctx_typed Gamma vs |~
-      wp (subst_map vs e) (fun v => A v ** TRUE) EPhi.
+  forall vs, ctx_typed Gamma vs |~ wp (subst_map vs e) (abs1 A) (abs2 TEx).
 
 Definition copy (A : ty) : Prop :=
   forall v, A v |~ @[ EMP |~ A v ].
 
 Definition subty (A1 A2 : ty) : Prop :=
   forall v, A1 v |~ A2 v.
-
-(** We lift subtyping to contexts. This allows us to:
-
-1. Have a stronger subsumption rule that also allows subtyping of the variable
-   context, see [subsumption].
-2. Formalize that the list is in fact a set (i.e., the order is not relevant),
-   see [subctx_swap].
-3. Lift the weakening and contraction rules to context subtyping, see
-   [subctx_copy_weakening] and [subctx_copy_contraction]. *)
 
 Definition subctx (Gamma1 Gamma2 : ty_ctx) : Prop :=
   forall vs, ctx_typed Gamma1 vs |~ ctx_typed Gamma2 vs.
@@ -154,9 +130,6 @@ Proof.
   iDestruct "Hctx" as "[$ Hctx]". by iApply "IH".
 Qed.
 
-(** We can extend the environment [vs] with a new binding, as long as it is
-fresh. *)
-
 Lemma ctx_typed_insert Gamma vs x v :
   ~In x (ctx_dom Gamma) ->
   ctx_typed Gamma vs |~ ctx_typed Gamma (StringMap.insert x v vs).
@@ -169,4 +142,62 @@ Proof.
     destruct (String.eq_dec _ _) as [->|]; [|done].
     destruct Hfresh; auto.
   - iApply ("IH" with "[%] Hctx"). tauto.
+Qed.
+
+Ltac ex_done := iSplit; [| iIntros (??) "[??]"; by iFrame].
+Tactic Notation "wp_absorb" constr(spat) :=
+  iApply (absorb with spat);
+    [apply wp_absorbing; intros; apply abs_absorbing | done |].
+
+Lemma Unit_typed :
+  val_typed VUnit TUnit.
+Proof.
+  by iIntros "_".
+Qed.
+
+Lemma Nat_typed n :
+  val_typed (VNat n) TNat.
+Proof.
+  iIntros "_"; by iExists n.
+Qed.
+
+Lemma Bool_typed b :
+  val_typed (VBool b) TBool.
+Proof.
+  iIntros "_"; by iExists b.
+Qed.
+
+Lemma Closure_typed x e A1 A2 :
+  typed [(x, A1)] e A2 ->
+  val_typed (VClosure x e) (TFun A1 A2).
+Proof.
+  iIntros (He) "_ !% %v Hv".
+  iApply App_wp. rewrite <-subst_map_singleton.
+  iApply He; simpl. iSplitL; [| done].
+  iExists v; iFrame; StringMap.map_solver.
+Qed.
+
+Lemma Lam_typed Gamma x e A1 A2 :
+  ~In x (ctx_dom Gamma) ->
+  typed ((x, A1) :: Gamma) e A2 ->
+  typed Gamma (ELam x e) (TFunOnce A1 A2).
+Proof.
+  iIntros (Hdom He vs) "Hvs"; simpl.
+  iApply Lam_wp. iSplitL; [| done]. iIntros (v) "Hv".
+  iApply App_wp. rewrite <-subst_map_insert.
+  iApply He; simpl. iSplitL "Hv".
+  { iExists v; iFrame; StringMap.map_solver. }
+  by iApply ctx_typed_insert.
+Qed.
+
+Lemma App_typed Gamma1 Gamma2 e1 e2 A1 A2 :
+  typed Gamma1 e1 (TFunOnce A1 A2) ->
+  typed Gamma2 e2 A1 ->
+  typed (Gamma1 ++ Gamma2) (EApp e1 e2) A2.
+Proof.
+  iIntros (He1 He2 vs) "Hvs"; simpl.
+  iDestruct (ctx_typed_app with "Hvs") as "[Hvs1 Hvs2]".
+  iApply (He1 with "Hvs1"); ex_done; iIntros (v1) "[Hv1 ?]".
+  iApply (He2 with "Hvs2"); ex_done; iIntros (v2) "[Hv2 ?]".
+  wp_absorb "[- Hv1 Hv2]". iApply ("Hv1" with "Hv2").
 Qed.

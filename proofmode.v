@@ -470,6 +470,36 @@ Proof.
   iApply Lam_wp. by iApply App_wp.
 Qed.
 
+Definition absorbing (P : sepProp) : Prop := P ** TRUE |~ P.
+Definition abs (P : sepProp) : sepProp := P ** TRUE.
+Definition abs1 {A} (Phi : A -> sepProp) : A -> sepProp :=
+  fun x => Phi x ** TRUE.
+Definition abs2 {A B} (Phi : A -> B -> sepProp) : A -> B -> sepProp :=
+  fun x y => Phi x y ** TRUE.
+
+Lemma abs_absorbing P :
+  absorbing (abs P).
+Proof.
+  iIntros "[[HP ?] ?]". by iFrame.
+Qed.
+
+Lemma wp_absorbing Phi EPhi e :
+  (forall v, absorbing (Phi v)) ->
+  (forall t v, absorbing (EPhi t v)) ->
+  absorbing (wp e Phi EPhi).
+Proof.
+  iIntros (Phi_abs EPhi_abs) "[Hwp ?]".
+  iApply wp_mono; [apply Phi_abs | apply EPhi_abs |].
+  iApply wp_frame. iFrame.
+Qed.
+
+Lemma absorb P :
+  absorbing P ->
+  TRUE |~ P -** P.
+Proof.
+  iIntros (P_abs) "??". iApply P_abs. iFrame.
+Qed.
+
 (* ########################################################################## *)
 (** Defined language constructs: let, sum, pair let, linear load *)
 (* ########################################################################## *)
