@@ -233,7 +233,7 @@ Inductive ctx : (expr -> expr) -> Prop :=
 
 Notation sepProp := (sepProp val).
 
-Notation "P # Q" := (res_rect (fun _ => sepProp) P Q)
+Notation "P # Q" := (res_rect (fun _ => _) P Q)
   (at level 10, no associativity).
 
 Definition wp (e : expr) (Phi : val -> sepProp) 
