@@ -2,13 +2,6 @@ From iris.proofmode Require Export tactics.
 From pv Require Export language.
 
 (* ########################################################################## *)
-(** Separation logic notations *)
-(* ########################################################################## *)
-
-Notation "'TRUE'" := sepTrue.
-Notation "'FALSE'" := sepFalse.
-
-(* ########################################################################## *)
 (** Make the proof mode work *)
 (* ########################################################################## *)
 
@@ -420,6 +413,13 @@ Global Unset SsrRewrite.
 
 
 (* ########################################################################## *)
+(** Separation logic notations *)
+(* ########################################################################## *)
+
+Notation "'TRUE'" := sepTrue.
+Notation "'FALSE'" := sepFalse.
+
+(* ########################################################################## *)
 (** Substitution *)
 (* ########################################################################## *)
 
@@ -446,7 +446,7 @@ Fixpoint subst_map (vs : stringmap val) (e : expr) : expr :=
   | ELoad e => ELoad (subst_map vs e)
   | EFree e => EFree (subst_map vs e)
   | EThrow t e => EThrow t (subst_map vs e)
-  | ECatch e1 t A e2 => ECatch (subst_map vs e1) t A (subst_map vs e2)
+  | ECatch e1 t e2 => ECatch (subst_map vs e1) t (subst_map vs e2)
   end.
 
 Lemma subst_map_empty e :
@@ -522,11 +522,11 @@ Proof.
   iIntros "HEPhi". iApply Throw_wp. by iApply Val_wp.
 Qed.
 
-Lemma Catch_Lam_wp Phi EPhi e1 t A x e2 EPhi' :
+Lemma Catch_Lam_wp Phi EPhi e1 t x e2 EPhi' :
   TCSimpl (fun t' v1 => if tag_dec t t'
                           then wp (subst x v1 e2) Phi EPhi
                           else EPhi t' v1) EPhi' ->
-  wp e1 Phi EPhi' |~ wp (ECatch e1 t A (ELam x e2)) Phi EPhi.
+  wp e1 Phi EPhi' |~ wp (ECatch e1 t (ELam x e2)) Phi EPhi.
 Proof.
   iIntros (<-) "He1". iApply Catch_wp.
   iApply wp_mono; [done | | done]; iIntros (t' v1) "Hwp"; simpl.
@@ -564,8 +564,6 @@ Notation ELetPair x1 x2 e1 e2 :=
 Definition lin_load :=
   VClosure "l" (EPair (EVar "l") (ELoad (EVar "l"))).
 Notation ELinLoad e := (EApp (EVal lin_load) e) (only parsing).
-
-Opaque wp.
 
 Lemma Let_wp Phi EPhi x e1 e2 Phi' :
   TCSimpl (fun v1 => wp (subst x v1 e2) Phi EPhi) Phi' ->
@@ -716,9 +714,9 @@ Module language_notation.
 
   Notation "'throw' t e" := (EThrow t e)
     (at level 10, t at level 1).
-  Notation "e1 'catch:' t A x => e2" := (ECatch e1 t A (ELam x e2))
-    (at level 90, t, A, x at level 1, e2 at level 90, left associativity,
-     format "'[hv' e1  '/  ' 'catch:'  t  A  x  =>  '/  ' e2 ']'").
+  Notation "e1 'catch:' t x => e2" := (ECatch e1 t (ELam x e2))
+    (at level 90, t, x at level 1, left associativity,
+     format "'[hv' e1  '/  ' 'catch:'  t  x  =>  '/  ' e2 ']'").
 
   Notation "'let:' ( x1 , x2 ) := e1 'in' e2" := (ELetPair x1 x2 e1 e2)
     (at level 200, x1, x2 at level 1, e1, e2 at level 200,
