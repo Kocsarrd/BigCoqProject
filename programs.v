@@ -20,7 +20,7 @@ Definition dec_list : val :=
         let: "x" := fst !"p" in
         let: "l" := snd !"p" in
         if: "x" =: 0
-          then throw IllegalArgumentException ()
+          then throw IllegalArgumentException 0
           else "p" <- ("x" -: 1, "l");;
                "dec_list" "l"
     end.
@@ -65,7 +65,7 @@ Lemma dec_list_spec l v :
   {{ vret, @[ vret = () ] **
            @[ Forall positive l ] **
            is_list (map pred l) v }}
-  {{ t vex, @[ t = IllegalArgumentException ] ** @[ vex = () ] **
+  {{ t vex, @[ t = IllegalArgumentException ] ** @[ vex = 0 ] **
             Ex l1 l2, @[ l = l1 ++ 0 :: l2 ] **
                       @[ Forall positive l1 ] **
                       is_list (map pred l1 ++ 0 :: l2) v }}.
