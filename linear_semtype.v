@@ -44,6 +44,32 @@ Fixpoint ctx_typed (Gamma : ty_ctx) (vs : stringmap val) : sepProp :=
       ctx_typed Gamma vs
   end.
 
+Fixpoint subst_map (vs : stringmap val) (e : expr) : expr :=
+  match e with
+  | EVal _ => e
+  | EVar y =>
+     match StringMap.lookup vs y with
+     | Some v => EVal v
+     | None => e
+     end
+  | ELam y e => ELam y (subst_map (StringMap.delete y vs) e)
+  | ERec f y e =>
+     ERec f y (subst_map (StringMap.delete y (StringMap.delete f vs)) e)
+  | EApp e1 e2 => EApp (subst_map vs e1) (subst_map vs e2)
+  | EOp op e1 e2 => EOp op (subst_map vs e1) (subst_map vs e2)
+  | EPair e1 e2 => EPair (subst_map vs e1) (subst_map vs e2)
+  | EFst e => EFst (subst_map vs e)
+  | ESnd e => ESnd (subst_map vs e)
+  | EIf e1 e2 e3 => EIf (subst_map vs e1) (subst_map vs e2) (subst_map vs e3)
+  | ESeq e1 e2 => ESeq (subst_map vs e1) (subst_map vs e2)
+  | EAlloc e => EAlloc (subst_map vs e)
+  | EStore e1 e2 => EStore (subst_map vs e1) (subst_map vs e2)
+  | ELoad e => ELoad (subst_map vs e)
+  | EFree e => EFree (subst_map vs e)
+  | EThrow t e => EThrow t (subst_map vs e)
+  | ECatch e1 t e2 => ECatch (subst_map vs e1) t (subst_map vs e2)
+  end.
+
 (** The semantic typing judgments are defined similarly to the ones from week 6,
 but using separation logic entailment [|~] instead of a Coq implication. *)
 
@@ -72,6 +98,48 @@ Definition subty (A1 A2 : ty) : Prop :=
 
 Definition subctx (Gamma1 Gamma2 : ty_ctx) : Prop :=
   forall vs, ctx_typed Gamma1 vs |~ ctx_typed Gamma2 vs.
+
+(* ########################################################################## *)
+(** * Helper lemmas *)
+(* ########################################################################## *)
+
+Lemma subst_map_empty e :
+  subst_map StringMap.empty e = e.
+Proof. induction e; simpl; by f_equal. Qed.
+
+Lemma subst_map_insert x v vs e :
+  subst_map (StringMap.insert x v vs) e
+  = subst x v (subst_map (StringMap.delete x vs) e).
+Proof.
+  revert vs. induction e; intros vs; simpl; try (by f_equal).
+  - (** Case var *)
+    rewrite StringMap.lookup_delete, StringMap.lookup_insert.
+    destruct (String.eq_dec _ _); simplify_eq.
+    + by destruct (String.eq_dec _ _).
+    + destruct (StringMap.lookup vs s) eqn:E; simpl; eauto.
+      by destruct (String.eq_dec _ _).
+  - (** Case lam *)
+    destruct (String.eq_dec _ _); simplify_eq.
+    + f_equal. f_equal. StringMap.map_solver.
+    + f_equal. rewrite StringMap.delete_delete.
+      destruct (String.eq_dec _ _); [done|].
+      rewrite <-IHe. f_equal. StringMap.map_solver.
+  - (** Case rec *)
+    destruct (String.eq_dec _ _); simplify_eq.
+    { do 2 f_equal. StringMap.map_solver. }
+    destruct (String.eq_dec _ _); simplify_eq.
+    { do 2 f_equal. StringMap.map_solver. }
+    do 2 f_equal.
+    do 2 rewrite StringMap.delete_insert, String.eq_dec_neq by congruence.
+    rewrite IHe. do 2 f_equal. StringMap.map_solver.
+Qed.
+
+Lemma subst_map_singleton x v e :
+  subst_map (StringMap.singleton x v) e = subst x v e.
+Proof.
+  rewrite <-StringMap.insert_empty, subst_map_insert.
+  by rewrite StringMap.delete_empty, subst_map_empty.
+Qed.
 
 (* ########################################################################## *)
 (** * Semantic typing rules *)
