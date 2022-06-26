@@ -627,13 +627,26 @@ Lemma Fun_subty A1 A2 B1 B2 :
   subty A2 A1 ->
   subty B1 B2 ->
   subty (TFun A1 B1) (TFun A2 B2).
-Proof. Admitted.
+Proof. 
+  iIntros (HA HB v) "Hfun"; iDestruct "Hfun" as %Hfun.
+  iSplitL;[|done]; iIntros "!% %w Hw".
+  iDestruct (HA with "Hw") as "[Hw ?]"; wp_absorb "[- Hw]". 
+  iApply (Hfun with "[Hw]"); [done|ex_done].
+  iIntros (vret) "[Hvret ?]".
+  iDestruct (HB with "Hvret") as "[Hvret ?]"; iFrame.
+Qed.
 
 Lemma FunOnce_subty A1 A2 B1 B2 :
   subty A2 A1 ->
   subty B1 B2 ->
   subty (TFunOnce A1 B1) (TFunOnce A2 B2).
-Proof. Admitted.
+Proof. 
+  iIntros (HA HB v) "Hfun"; iSplitL;[|done]; iIntros (w) "Hw".
+  iDestruct (HA with "Hw") as "[Hw ?]"; wp_absorb "[- Hw Hfun]".
+  iApply ("Hfun" with "Hw"); ex_done.
+  iIntros (vret) "[Hvret ?]".
+  iDestruct (HB with "Hvret") as "[Hvret ?]"; iFrame. 
+Qed.
 
 Lemma subctx_refl Gamma :
   subctx Gamma Gamma.
