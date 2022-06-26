@@ -62,8 +62,8 @@ Fixpoint subst (x : string) (w : val) (e : expr) : expr :=
   | EAlloc e => EAlloc (subst x w e)
   | ELoad e => ELoad (subst x w e)
   | EStore e1 e2 => EStore (subst x w e1) (subst x w e2)
-  | EFree e => EFree (subst x w e)
   | EThrow t e => EThrow t (subst x w e)
+  | EFree e => EFree (subst x w e)
   | ECatch e1 t e2 => ECatch (subst x w e1) t (subst x w e2)
   end.
 
