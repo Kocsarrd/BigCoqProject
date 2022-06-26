@@ -399,6 +399,7 @@ Proof.
   - iApply If_false_wp. wp_absorb "[- Hvs2]". by iApply He3.
 Qed.
 
+
 Lemma Seq_typed Gamma1 Gamma2 e1 e2 A B :
   typed Gamma1 e1 A ->
   typed Gamma2 e2 B ->
