@@ -61,7 +61,7 @@ Fixpoint subst_map (vs : stringmap val) (e : expr) : expr :=
   end.
 
 Definition val_typed (v : val) (A : ty) : Prop :=
-  EMP |~ A v.
+  EMP |~ abs (A v).
 
 Definition typed (Gamma : ty_ctx) (e : expr) (A : ty) : Prop :=
   forall vs, ctx_typed Gamma vs |~ wp (subst_map vs e) (abs1 A) (abs2 TEx).
@@ -70,14 +70,14 @@ Definition copy (A : ty) : Prop :=
   forall v, A v |~ @[ EMP |~ A v ].
 
 Definition subty (A1 A2 : ty) : Prop :=
-  forall v, A1 v |~ A2 v.
+  forall v, A1 v |~ abs (A2 v).
 
 Definition subctx (Gamma1 Gamma2 : ty_ctx) : Prop :=
-  forall vs, ctx_typed Gamma1 vs |~ ctx_typed Gamma2 vs.
+  forall vs, ctx_typed Gamma1 vs |~ abs (ctx_typed Gamma2 vs).
 
 Definition bin_op_typed (op : bin_op) (A1 A2 B : ty) : Prop :=
   forall v1 v2,
-    A1 v1 ** A2 v2 |~ Ex v, @[ eval_bin_op op v1 v2 = Some v ] ** B v.
+    A1 v1 ** A2 v2 |~ abs (Ex v, @[ eval_bin_op op v1 v2 = Some v ] ** B v).
 
 (* ########################################################################## *)
 (** * Helper lemmas and tactics *)
@@ -124,60 +124,66 @@ Qed.
 Lemma PlusOp_typed :
   bin_op_typed PlusOp TNat TNat TNat.
 Proof.
-  iIntros (v1 v2) "[[%n1 ->] [%n2 ->]]"; simpl; eauto.
+  iIntros (v1 v2) "[[%n1 ->] [%n2 ->]]"; iSplitL; eauto.
 Qed.
 
 Lemma MinusOp_typed :
   bin_op_typed MinusOp TNat TNat TNat.
 Proof.
-  iIntros (v1 v2) "[[%n1 ->] [%n2 ->]]"; simpl; eauto.
+  iIntros (v1 v2) "[[%n1 ->] [%n2 ->]]"; iSplitL; eauto.
 Qed.
 
 Lemma LeOp_typed :
   bin_op_typed LeOp TNat TNat TBool.
 Proof.
-  iIntros (v1 v2) "[[%n1 ->] [%n2 ->]]"; simpl; eauto.
+  iIntros (v1 v2) "[[%n1 ->] [%n2 ->]]"; iSplitL; eauto.
 Qed.
 
 Lemma LtOp_typed :
   bin_op_typed LtOp TNat TNat TBool.
 Proof.
-  iIntros (v1 v2) "[[%n1 ->] [%n2 ->]]"; simpl; eauto.
+  iIntros (v1 v2) "[[%n1 ->] [%n2 ->]]"; iSplitL; eauto.
 Qed.
 
 Lemma EqOp_Nat_typed :
   bin_op_typed EqOp TNat TNat TBool.
 Proof.
-  iIntros (v1 v2) "[[%n1 ->] [%n2 ->]]"; simpl; eauto.
+  iIntros (v1 v2) "[[%n1 ->] [%n2 ->]]"; iSplitL; eauto.
 Qed.
 
 Lemma EqOp_Bool_typed :
   bin_op_typed EqOp TBool TBool TBool.
 Proof.
-  iIntros (v1 v2) "[[%b1 ->] [%b2 ->]]"; simpl; eauto.
+  iIntros (v1 v2) "[[%b1 ->] [%b2 ->]]"; iSplitL; eauto.
+Qed.
+
+Lemma EqOp_Ref_typed A :
+  bin_op_typed EqOp (TRef A) (TRef A) TBool.
+Proof.
+  iIntros (v1 v2) "[(%l1 & %w1 & -> & Hl1 & Hw1) (%l2 & %w2 & -> & Hl2 & Hw2)]";
+    iSplitR; eauto.
 Qed.
 
 Lemma ctx_typed_app Gamma1 Gamma2 vs :
   ctx_typed (Gamma1 ++ Gamma2) vs |~
   ctx_typed Gamma1 vs ** ctx_typed Gamma2 vs.
 Proof.
-  iIntros "Hctx". iInduction Gamma1 as [|[x A] Gamma] "IH"; simpl.
+  iIntros "Hvs". iInduction Gamma1 as [| [x A] Gamma1] "IH"; simpl.
   { by iFrame. }
-  iDestruct "Hctx" as "[$ Hctx]". by iApply "IH".
+  iDestruct "Hvs" as "[$ vs]". by iApply "IH".
 Qed.
 
 Lemma ctx_typed_insert Gamma vs x v :
   ~In x (ctx_dom Gamma) ->
   ctx_typed Gamma vs |~ ctx_typed Gamma (StringMap.insert x v vs).
 Proof.
-  iIntros (Hfresh) "Hctx".
-  iInduction Gamma as [|[y A] Gamma] "IH"; simpl in *; [done|].
-  iDestruct "Hctx" as "[(%w & %Hlookup & HA) Hctx]". iSplitL "HA".
-  - iExists w. iFrame "HA". iPureIntro.
+  iIntros (Hx) "Hvs".
+  iInduction Gamma as [|[y A] Gamma] "IH"; simpl in *; [done |].
+  iDestruct "Hvs" as "[(%w & % & Hw) Hvs]". iSplitL "Hw".
+  - iExists w. iFrame. iPureIntro.
     rewrite StringMap.lookup_insert.
-    destruct (String.eq_dec _ _) as [->|]; [|done].
-    destruct Hfresh; auto.
-  - iApply ("IH" with "[%] Hctx"). tauto.
+    destruct (String.eq_dec _ _) as [-> | ?]; tauto.
+  - iApply ("IH" with "[%] Hvs"). tauto.
 Qed.
 
 Ltac ex_done := iSplit; [| iIntros (??) "[??]"; by iFrame].
@@ -272,20 +278,20 @@ Qed.
 Lemma Nat_typed n :
   val_typed (VNat n) TNat.
 Proof.
-  iIntros "_"; by iExists n.
+  iIntros "_"; iSplitR; [| done]; by iExists n.
 Qed.
 
 Lemma Bool_typed b :
   val_typed (VBool b) TBool.
 Proof.
-  iIntros "_"; by iExists b.
+  iIntros "_"; iSplitR; [| done]; by iExists b.
 Qed.
 
 Lemma Closure_typed x e A1 A2 :
   typed [(x, A1)] e A2 ->
   val_typed (VClosure x e) (TFun A1 A2).
 Proof.
-  iIntros (He) "_ !% %v Hv".
+  iIntros (He) "_". iSplitR; [| done]. iIntros "!% %v Hv".
   iApply App_wp. rewrite <-subst_map_singleton.
   iApply He; simpl. iSplitL; [| done].
   iExists v; iFrame; StringMap.map_solver.
@@ -296,7 +302,8 @@ Lemma Val_typed Gamma v A :
   typed Gamma (EVal v) A.
 Proof.
   iIntros (Hv vs) "Hvs"; simpl.
-  iApply Val_wp. iSplitR; [| done]. by iApply Hv.
+  iDestruct (Hv with "[//]") as "-#[Hv ?]".
+  iApply Val_wp. by iSplitL "Hv".
 Qed.
 
 Lemma Var_typed Gamma x A :
@@ -347,7 +354,7 @@ Proof.
   iDestruct (ctx_typed_app with "Hvs") as "[Hvs1 Hvs2]".
   iApply (He1 with "Hvs1"); ex_done; iIntros (v1) "[Hv1 ?]".
   iApply (He2 with "Hvs2"); ex_done; iIntros (v2) "[Hv2 ?]".
-  iDestruct (Hop with "[$Hv1 $Hv2]") as (v Heval) "Hv".
+  iDestruct (Hop with "[$Hv1 $Hv2]") as "[(%v & % & Hv) ?]".
   iApply Op_wp. iFrame.
 Qed.
 
@@ -558,7 +565,7 @@ Qed.
 Lemma subty_refl A :
   subty A A.
 Proof.
-  iIntros (v) "HA //".
+  iIntros (v) "$ //".
 Qed.
 
 Lemma subty_trans A1 A2 A3 :
@@ -566,20 +573,22 @@ Lemma subty_trans A1 A2 A3 :
   subty A2 A3 ->
   subty A1 A3.
 Proof.
-  iIntros (HA12 HA23 v) "HA1". iApply HA23. by iApply HA12.
+  iIntros (HA12 HA23 v) "Hv".
+  iDestruct (HA12 with "Hv") as "[Hv ?]".
+  iDestruct (HA23 with "Hv") as "[Hv ?]". iFrame.
 Qed.
 
-Lemma subty_copy A :
-  copy A ->
+Lemma subty_moved A :
   subty A TMoved.
 Proof.
-  iIntros (HA v) "Hv". by iApply copy_emp.
+  iIntros (v) "Hv". by iSplitR.
 Qed.
 
 Lemma Fun_to_FunOnce_subty A1 A2 :
   subty (TFun A1 A2) (TFunOnce A1 A2).
 Proof.
-  iStartProof; iIntros (v Hfun w) "Hw". by iApply Hfun.
+  iStartProof; iIntros (v Hfun). iSplitL; [| done].
+  iIntros (w) "Hw". by iApply Hfun.
 Qed.
 
 Lemma Ref_subty A1 A2 :
@@ -587,7 +596,8 @@ Lemma Ref_subty A1 A2 :
   subty (TRef A1) (TRef A2).
 Proof.
   iIntros (HA v) "(%l & %w & % & Hl & Hv)".
-  iExists l, w. iSplitR; [done |]; iFrame. by iApply HA.
+  iDestruct (HA with "Hv") as "[Hv ?]".
+  iSplitL "Hl Hv"; [| done]. iExists l, w. by iFrame.
 Qed.
 
 Lemma Prod_subty A1 A2 B1 B2 :
@@ -596,8 +606,9 @@ Lemma Prod_subty A1 A2 B1 B2 :
   subty (TProd A1 B1) (TProd A2 B2).
 Proof.
   iIntros (HA HB v) "(%w1 & %w2 & % & Hw1 & Hw2)".
-  iExists w1, w2. iSplitR; [done |].
-  iSplitL "Hw1"; [by iApply HA | by iApply HB].
+  iDestruct (HA with "Hw1") as "[Hw1 ?]".
+  iDestruct (HB with "Hw2") as "[Hw2 ?]".
+  iSplitL "Hw1 Hw2"; [| done]. iExists w1, w2. by iFrame.
 Qed.
 
 Lemma Sum_subty A1 A2 B1 B2 :
@@ -606,8 +617,10 @@ Lemma Sum_subty A1 A2 B1 B2 :
   subty (TSum A1 B1) (TSum A2 B2).
 Proof.
   iIntros (HA HB v) "[%w [[% Hw] | [% Hw]]]".
-  - iExists w. iLeft; iSplitR; [done |]. by iApply HA.
-  - iExists w. iRight; iSplitR; [done |]. by iApply HB.
+  - iDestruct (HA with "Hw") as "[Hw ?]".
+    iSplitL "Hw"; [| done]. iExists w. iLeft. by iFrame.
+  - iDestruct (HB with "Hw") as "[Hw ?]".
+    iSplitL "Hw"; [| done]. iExists w. iRight. by iFrame.
 Qed.
 
 Lemma Fun_subty A1 A2 B1 B2 :
@@ -625,7 +638,7 @@ Proof. Admitted.
 Lemma subctx_refl Gamma :
   subctx Gamma Gamma.
 Proof.
-  iIntros (vs) "Hvs //".
+  iIntros (vs) "$ //".
 Qed.
 
 Lemma subctx_trans Gamma1 Gamma2 Gamma3 :
@@ -633,7 +646,9 @@ Lemma subctx_trans Gamma1 Gamma2 Gamma3 :
   subctx Gamma2 Gamma3 ->
   subctx Gamma1 Gamma3.
 Proof.
-  iIntros (HGamma12 HGamma23 vs) "Hvs". iApply HGamma23. by iApply HGamma12.
+  iIntros (HGamma12 HGamma23 vs) "Hvs".
+  iDestruct (HGamma12 with "Hvs") as "[Hvs ?]".
+  iDestruct (HGamma23 with "Hvs") as "[Hvs ?]". iFrame.
 Qed. 
 
 Lemma subctx_cons Gamma1 Gamma2 x A1 A2 :
@@ -643,32 +658,31 @@ Lemma subctx_cons Gamma1 Gamma2 x A1 A2 :
 Proof.
   iIntros (HA HGamma vs) "Hvs"; simpl.
   iDestruct "Hvs" as "[(%v & % & Hv) Hvs]".
-  iSplitR "Hvs"; [| by iApply HGamma].
-  iExists v; iSplitR; [done |]. by iApply HA.
+  iDestruct (HA with "Hv") as "[Hv ?]".
+  iDestruct (HGamma with "Hvs") as "[Hvs ?]".
+  iSplitL "Hv Hvs"; [| done]. iFrame. iExists v. by iFrame.
 Qed.
 
 Lemma subctx_swap Gamma x1 x2 A1 A2 :
   subctx ((x1, A1) :: (x2, A2) :: Gamma) ((x2, A2) :: (x1, A1) :: Gamma).
 Proof.
-  iIntros (vs) "Hvs"; simpl.
+  iIntros (vs) "Hvs"; simpl. iSplitL; [| done].
   iDestruct "Hvs" as "((%v1 & % & Hv1) & (%v2 & % & Hv2) & Hvs)".
   iFrame; iSplitL "Hv2"; eauto.
 Qed.
 
-Lemma subctx_copy_weakening Gamma x A :
-  copy A ->
+Lemma subctx_weakening Gamma x A :
   subctx ((x, A) :: Gamma) Gamma.
 Proof.
-  iIntros (HA vs) "Hvs"; simpl.
-  iDestruct "Hvs" as "[(%v & _ & Hv) Hvs]".
-  iFrame. by iApply copy_emp.
+  iIntros (vs) "Hvs"; simpl.
+  iDestruct "Hvs" as "[(%v & _ & Hv) Hvs]". by iFrame.
 Qed.
 
 Lemma subctx_copy_contraction Gamma x A :
   copy A ->
   subctx ((x, A) :: Gamma) ((x, A) :: (x, A) :: Gamma).
 Proof.
-  iIntros (HA vs) "Hvs"; simpl.
+  iIntros (HA vs) "Hvs"; simpl. iSplitL; [| done].
   iDestruct "Hvs" as "[(%v & % & Hv) Hvs]". iFrame.
   iDestruct (copy_dup with "Hv") as "[Hv1 Hv2]"; [done |].
   iSplitL "Hv1"; iExists v; by iFrame.
@@ -679,7 +693,9 @@ Lemma val_subsumption v A1 A2 :
   val_typed v A1 ->
   val_typed v A2.
 Proof.
-  iIntros (HA Hv) "_". iApply HA. by iApply Hv.
+  iIntros (HA Hv) "_".
+  iDestruct (Hv with "[//]") as "-#[Hv ?]".
+  iDestruct (HA with "Hv") as "[Hv ?]". iFrame.
 Qed.
 
 Lemma subsumption Gamma1 Gamma2 e A1 A2 :
@@ -689,8 +705,9 @@ Lemma subsumption Gamma1 Gamma2 e A1 A2 :
   typed Gamma2 e A2.
 Proof.
   iIntros (HGamma HA He vs) "Hvs".
-  iApply (He with "[Hvs]"); [by iApply HGamma |]; ex_done.
-  iIntros (v) "[Hv1 ?]". iSplitL "Hv1"; [| done]. by iApply HA.
+  iDestruct (HGamma with "Hvs") as "[Hvs ?]".
+  iApply (He with "Hvs"); ex_done; iIntros (v) "[Hv1 ?]".
+  iDestruct (HA with "Hv1") as "[Hv1 ?]". iFrame.
 Qed.
 
 Definition terminates (e : expr) :Prop :=
