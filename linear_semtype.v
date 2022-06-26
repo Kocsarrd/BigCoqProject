@@ -186,6 +186,80 @@ Tactic Notation "wp_absorb" constr(spat) :=
     [apply wp_absorbing; intros; apply abs_absorbing | done |].
 
 (* ########################################################################## *)
+(** * Copy rules *)
+(* ########################################################################## *)
+
+Lemma copy_emp A v :
+  copy A ->
+  A v |~ EMP.
+Proof.
+  iIntros (HA) "Hv".
+  by iDestruct (HA with "Hv") as "Hv".
+Qed.
+
+Lemma copy_dup A v :
+  copy A ->
+  A v |~ A v ** A v.
+Proof.
+  iIntros (HA) "Hv".
+  iDestruct (HA with "Hv") as %Hv. iFrame "Hv". by iApply Hv.
+Qed.
+
+Lemma Moved_copy :
+  copy TMoved.
+Proof.
+  by iIntros (v) "_ !% _".
+Qed.
+
+Lemma Unit_copy :
+  copy TUnit.
+Proof.
+  by iIntros (v) "-> !% _".
+Qed.
+
+Lemma Nat_copy :
+  copy TNat.
+Proof.
+  iIntros (v) "[%n ->] !% _"; eauto.
+Qed.
+
+Lemma Bool_copy :
+  copy TBool.
+Proof.
+  iIntros (v) "[%b ->] !% _"; eauto.
+Qed.
+
+Lemma Prod_copy A1 A2 :
+  copy A1 ->
+  copy A2 ->
+  copy (TProd A1 A2).
+Proof.
+  iIntros (HA1 HA2 v) "(%w1 & %w2 & % & Hw1 & Hw2)".
+  iDestruct (HA1 with "Hw1") as "Hw1"; iDestruct "Hw1" as %Hw1.
+  iDestruct (HA2 with "Hw2") as "Hw2"; iDestruct "Hw2" as %Hw2.
+  iIntros "!% _"; iExists w1, w2. iSplitR; [done |].
+  iSplitR; [by iApply Hw1 | by iApply Hw2].
+Qed.
+
+Lemma Sum_copy A1 A2 :
+  copy A1 ->
+  copy A2 ->
+  copy (TSum A1 A2).
+Proof.
+  iIntros (HA1 HA2 v) "[%w [[% Hw] | [% Hw]]]".
+  - iDestruct (HA1 with "Hw") as "Hw"; iDestruct "Hw" as %Hw.
+    iIntros "!% _"; iExists w. iLeft; iSplitR; [done |]. by iApply Hw.
+  - iDestruct (HA2 with "Hw") as "Hw"; iDestruct "Hw" as %Hw.
+    iIntros "!% _"; iExists w. iRight; iSplitR; [done |]. by iApply Hw.
+Qed.
+
+Lemma Fun_copy A1 A2 :
+  copy (TFun A1 A2).
+Proof.
+  by iStartProof; iIntros (v) "%Hfun !% _".
+Qed.
+
+(* ########################################################################## *)
 (** * Semantic typing rules *)
 (* ########################################################################## *)
 
@@ -296,7 +370,21 @@ Lemma LetPair_typed Gamma1 Gamma2 x1 x2 e1 e2 A1 A2 B :
   typed Gamma1 e1 (TProd A1 A2) ->
   typed ((x1, A1) :: (x2, A2) :: Gamma2) e2 B ->
   typed (Gamma1 ++ Gamma2) (ELetPair x1 x2 e1 e2) B.
-Proof. Admitted.
+Proof. 
+  iIntros (Hin1 Hin2 Hne He1 He2 vs) "Hvs"; simpl.
+  iDestruct (ctx_typed_app with "Hvs") as "[Hvs1 Hvs2]".
+  iApply (He1 with "Hvs1"); ex_done; 
+  iIntros (v1) "[(%w1 & %w2 & -> & Hw1 & Hw2) Htrue]"; wp_absorb "[Htrue]".
+  iApply LetPair_wp. rewrite <- subst_map_insert, StringMap.insert_delete. 
+  destruct String.eq_dec; [done|].
+  rewrite <- subst_map_insert. 
+  iApply He2; simpl. 
+  iSplitL "Hw1".
+  { iExists w1; iFrame. StringMap.map_solver. }
+  iSplitL "Hw2".
+  { iExists w2; iFrame. StringMap.map_solver. }
+  iApply ctx_typed_insert; [done|]. by iApply ctx_typed_insert. 
+Qed.
 
 Lemma If_typed Gamma1 Gamma2 e1 e2 e3 A :
   typed Gamma1 e1 TBool ->
@@ -325,57 +413,121 @@ Qed.
 Lemma Alloc_typed Gamma e A :
   typed Gamma e A ->
   typed Gamma (EAlloc e) (TRef A).
-Proof. Admitted.
+Proof.
+  iIntros (He vs) "Hvs"; simpl. 
+  iApply (He with "Hvs"); ex_done; iIntros (vret) "[Hvret ?]". 
+  iApply Alloc_wp. iIntros (l) "Hl";iFrame;iSplitL;[|done].
+  iExists l; eauto with iFrame.
+Qed. 
 
 Lemma LinLoad_typed Gamma e A :
   typed Gamma e (TRef A) ->
   typed Gamma (ELinLoad e) (TProd (TRef TMoved) A).
-Proof. Admitted.
+Proof.
+  iIntros (He vs) "Hvs";simpl.
+  iApply (He with "Hvs"); ex_done; 
+  iIntros (vret) "[(%l & %w & -> & Hl & Hw) Htrue]".
+  iApply LinLoad_wp; iIntros "{$Hl} Hl {$Htrue}"; iSplitL;[|done].
+  iExists (VRef l), w; iFrame; iSplitR; [done|].
+  iExists l; eauto with iFrame. 
+Qed.
 
 Lemma LinLoad_copy_typed Gamma e A :
   copy A ->
   typed Gamma e (TRef A) ->
   typed Gamma (ELinLoad e) (TProd (TRef A) A).
-Proof. Admitted.
+Proof. 
+  iIntros (Hcopy He vs) "Hvs"; simpl.
+  iApply (He with "Hvs"); ex_done;
+  iIntros (vret) "[(%l & %w & -> & Hl & Hw) Htrue]".
+  iApply LinLoad_wp; iIntros "{$Hl} Hl {$Htrue}"; iSplitL;[|done].
+  iDestruct (copy_dup with "Hw") as "[Hw1 Hw2]";[done|]. 
+  iExists (VRef l), w; iFrame; iSplitR; [done|].
+  iExists l, w; eauto with iFrame.
+Qed.
 
 Lemma Store_typed Gamma1 Gamma2 e1 e2 A :
   typed Gamma1 e1 (TRef A) ->
   typed Gamma2 e2 A ->
   typed (Gamma1 ++ Gamma2) (EStore e1 e2) (TRef A).
-Proof. Admitted.
+Proof. 
+  iIntros (He1 He2 vs) "Hvs"; simpl.
+  iDestruct (ctx_typed_app with "Hvs") as "[Hvs1 Hvs2]".
+  iApply (He1 with "Hvs1"); ex_done; 
+  iIntros (v1) "[(%l & %w & -> & Hl & Hw) ?]".
+  iApply (He2 with "Hvs2"); ex_done; iIntros (v2) "[Hv2 ?]".
+  wp_absorb "[- Hl Hw Hv2]"; iApply Store_wp; iFrame.
+  iIntros "Hl"; iSplitR "Hw"; [|done].
+  iExists l, v2; eauto with iFrame.
+Qed.
 
 Lemma Free_typed Gamma e A :
   typed Gamma e (TRef A) ->
   typed Gamma (EFree e) A.
-Proof. Admitted.
+Proof.
+  iIntros (He vs) "Hvs"; simpl.
+  iApply (He with "Hvs"); ex_done; iIntros (v) "[(%l & %w & -> & Hl & Hw) ?]".
+  iApply Free_wp; eauto with iFrame.
+Qed.
 
 Lemma Throw_typed Gamma t e A :
   typed Gamma e TNat ->
   typed Gamma (EThrow t e) A.
-Proof. Admitted.
+Proof.
+  iIntros (He vs) "Hvs"; simpl.
+  iApply Throw_wp; by iApply He.
+Qed.
 
 Lemma Catch_typed Gamma1 Gamma2 e1 t e2 A :
   typed Gamma1 e1 A ->
   typed Gamma2 e2 (TFunOnce TNat A) ->
   typed (Gamma1 ++ Gamma2) (ECatch e1 t e2) A.
-Proof. Admitted.
+Proof.
+  iIntros (He1 He2 vs) "Hvs"; simpl.
+  iDestruct (ctx_typed_app with "Hvs") as "[Hvs1 Hvs2]".
+  iApply Catch_wp. 
+  iApply (He1 with "Hvs1"); iSplitR.
+  { iIntros (?) "$Hvret". }
+  iIntros (t' ve) "[Hve ?]". destruct (tag_dec t t'); [|iFrame].
+  iApply (He2 with "Hvs2"); ex_done; iIntros (vret) "[Hvret ?]".
+  wp_absorb "[- Hve Hvret]". by iApply "Hvret".
+Qed.
 
 Lemma Let_typed Gamma1 Gamma2 x e1 e2 A B :
   ~In x (ctx_dom Gamma2) ->
   typed Gamma1 e1 A ->
   typed ((x, A) :: Gamma2) e2 B ->
   typed (Gamma1 ++ Gamma2) (ELet x e1 e2) B.
-Proof. Admitted.
+Proof.
+  iIntros (Hin He1 He2 vs) "Hvs"; simpl.
+  iDestruct (ctx_typed_app with "Hvs") as "[Hvs1 Hvs2]".
+  iApply Let_wp. iApply (He1 with "Hvs1"); ex_done; iIntros (vret) "[Hvret ?]".
+  rewrite <- subst_map_insert. wp_absorb "[- Hvs2 Hvret]".
+  iApply (He2 with "[Hvret Hvs2]"); simpl. iSplitL "Hvret".
+  - iExists vret;iFrame. iPureIntro.
+    rewrite StringMap.lookup_insert. by destruct (String.eq_dec x x).
+  - by iApply (ctx_typed_insert with "Hvs2").
+Qed.
 
 Lemma InjL_typed Gamma e A1 A2 :
   typed Gamma e A1 ->
   typed Gamma (EInjL e) (TSum A1 A2).
-Proof. Admitted.
+Proof.
+  iIntros (He1 vs) "Hvs"; simpl.
+  iApply (He1 with "Hvs"); ex_done; iIntros (vret) "[Hvret ?]".
+  iApply InjL_wp; iFrame; iSplitL; [|done].
+  iExists vret; eauto with iFrame.
+Qed.
 
 Lemma InjR_typed Gamma e A1 A2 :
   typed Gamma e A2 ->
   typed Gamma (EInjR e) (TSum A1 A2).
-Proof. Admitted.
+Proof. 
+  iIntros (He1 vs) "Hvs"; simpl.
+  iApply (He1 with "Hvs"); ex_done; iIntros (vret) "[Hvret ?]".
+  iApply InjR_wp; iFrame; iSplitL; [|done].
+  iExists vret; eauto with iFrame.
+Qed.
 
 Lemma Match_typed Gamma1 Gamma2 e x1 e1 x2 e2 A1 A2 B :
   ~In x1 (ctx_dom Gamma2) ->
@@ -384,77 +536,23 @@ Lemma Match_typed Gamma1 Gamma2 e x1 e1 x2 e2 A1 A2 B :
   typed ((x1, A1) :: Gamma2) e1 B ->
   typed ((x2, A2) :: Gamma2) e2 B ->
   typed (Gamma1 ++ Gamma2) (EMatch e x1 e1 x2 e2) B.
-Proof. Admitted.
-
-Lemma copy_emp A v :
-  copy A ->
-  A v |~ EMP.
-Proof.
-  iIntros (HA) "Hv".
-  by iDestruct (HA with "Hv") as "Hv".
+Proof. 
+  iIntros (Hin1 Hin2 He He1 He2 vs) "Hvs"; simpl.
+  iDestruct (ctx_typed_app with "Hvs") as "[Hvs1 Hvs2]".
+  iApply (He with "Hvs1"); ex_done; unfold abs1,TSum.
+  iIntros (vret) "[(%w & [[-> Hw] | [-> Hw]]) ?]"; wp_absorb "[- Hvs2 Hw]".
+  - iApply Match_InjL_wp. rewrite <- subst_map_insert. iApply He1.
+    iSplitL "Hw".
+    { iExists w. rewrite StringMap.lookup_insert. 
+    destruct String.eq_dec;[|done]. eauto with iFrame. }
+    by iApply ctx_typed_insert.
+  - iApply Match_InjR_wp. rewrite <- subst_map_insert. iApply He2.
+    iSplitL "Hw".
+    { iExists w. rewrite StringMap.lookup_insert. 
+    destruct String.eq_dec;[|done]. eauto with iFrame. }
+    by iApply ctx_typed_insert.
 Qed.
 
-Lemma copy_dup A v :
-  copy A ->
-  A v |~ A v ** A v.
-Proof.
-  iIntros (HA) "Hv".
-  iDestruct (HA with "Hv") as %Hv. iFrame "Hv". by iApply Hv.
-Qed.
-
-Lemma Moved_copy :
-  copy TMoved.
-Proof.
-  by iIntros (v) "_ !% _".
-Qed.
-
-Lemma Unit_copy :
-  copy TUnit.
-Proof.
-  by iIntros (v) "-> !% _".
-Qed.
-
-Lemma Nat_copy :
-  copy TNat.
-Proof.
-  iIntros (v) "[%n ->] !% _"; eauto.
-Qed.
-
-Lemma Bool_copy :
-  copy TBool.
-Proof.
-  iIntros (v) "[%b ->] !% _"; eauto.
-Qed.
-
-Lemma Prod_copy A1 A2 :
-  copy A1 ->
-  copy A2 ->
-  copy (TProd A1 A2).
-Proof.
-  iIntros (HA1 HA2 v) "(%w1 & %w2 & % & Hw1 & Hw2)".
-  iDestruct (HA1 with "Hw1") as "Hw1"; iDestruct "Hw1" as %Hw1.
-  iDestruct (HA2 with "Hw2") as "Hw2"; iDestruct "Hw2" as %Hw2.
-  iIntros "!% _"; iExists w1, w2. iSplitR; [done |].
-  iSplitR; [by iApply Hw1 | by iApply Hw2].
-Qed.
-
-Lemma Sum_copy A1 A2 :
-  copy A1 ->
-  copy A2 ->
-  copy (TSum A1 A2).
-Proof.
-  iIntros (HA1 HA2 v) "[%w [[% Hw] | [% Hw]]]".
-  - iDestruct (HA1 with "Hw") as "Hw"; iDestruct "Hw" as %Hw.
-    iIntros "!% _"; iExists w. iLeft; iSplitR; [done |]. by iApply Hw.
-  - iDestruct (HA2 with "Hw") as "Hw"; iDestruct "Hw" as %Hw.
-    iIntros "!% _"; iExists w. iRight; iSplitR; [done |]. by iApply Hw.
-Qed.
-
-Lemma Fun_copy A1 A2 :
-  copy (TFun A1 A2).
-Proof.
-  by iStartProof; iIntros (v) "%Hfun !% _".
-Qed.
 
 Lemma subty_refl A :
   subty A A.
@@ -612,7 +710,7 @@ Section wp_adequacy.
   Qed.
 End wp_adequacy.
 
-Lemma type_soundness e A :
+Theorem type_soundness e A :
   typed [] e A ->
   terminates e.
 Proof.
