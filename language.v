@@ -110,15 +110,15 @@ Inductive big_step : expr -> heap -> res -> heap -> Prop :=
       big_step e1 h1 (ok v1) h2 ->
       big_step e2 h2 (ex t v2) h3 ->
       big_step (EApp e1 e2) h1 (ex t v2) h3
-  | Op_big_step h1 h2 h3 e1 e2 op v1 v2 v :
+  | Op_big_step h1 h2 h3 op e1 e2 v1 v2 v :
       big_step e1 h1 (ok v1) h2 ->
       big_step e2 h2 (ok v2) h3 ->
       eval_bin_op op v1 v2 = Some v ->
       big_step (EOp op e1 e2) h1 (ok v) h3
-  | Op_big_step_ex_l h1 h2 e1 e2 op t v1 :
+  | Op_big_step_ex_l h1 h2 op e1 e2 t v1 :
       big_step e1 h1 (ex t v1) h2 ->
       big_step (EOp op e1 e2) h1 (ex t v1) h2
-  | Op_big_step_ex_r h1 h2 h3 e1 e2 op t v1 v2 :
+  | Op_big_step_ex_r h1 h2 h3 op e1 e2 t v1 v2 :
       big_step e1 h1 (ok v1) h2 ->
       big_step e2 h2 (ex t v2) h3 ->
       big_step (EOp op e1 e2) h1 (ex t v2) h3
