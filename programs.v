@@ -2,6 +2,76 @@ From pv Require Import language.
 From pv Require Import proofmode.
 Import language_notation hoare_notation.
 
+(* ########################################################################## *)
+(** Example programs from the project description *)
+(* ########################################################################## *)
+
+Definition ex1 : expr :=
+  10 =: 10 catch: SomeException "e" => "e" =: 2.
+Definition ex2 : expr :=
+  throw SomeException 8 catch: SomeException "e" => "e" =: 2.
+Definition ex3 : expr :=
+  10 +: throw SomeException 8 catch: SomeException "e" => "e" =: 2.
+Definition ex4 : expr :=
+  throw SomeException 2 +: throw SomeException 8
+    catch: SomeException "e" => "e" =: 2.
+Definition ex5 : expr :=
+  throw SomeException (throw SomeException 2)
+    catch: SomeException "e" => "e" =: 2.
+Definition ex6 : expr :=
+  ((throw SomeException 8;; fun: "x" => "x")
+     catch: SomeException "_" => fun: "_" => 1) 8
+    catch: SomeException "_" => 2.
+Definition ex7 : expr :=
+  ((fun: "x" => throw SomeException "x")
+     catch: SomeException "_" => fun: "_" => 1) 8
+    catch: SomeException "_" => 2.
+Definition ex8 : expr :=
+  let: "l" := alloc 0 in
+  ("l" <- 10;; throw SomeException 8)
+    catch: SomeException "e" => "e";;
+  !"l".
+Definition ex9 : expr :=
+  (throw SomeException 2
+    catch: SomeException "e" => throw SomeException ("e" +: 3))
+    catch: SomeException "e" => "e".
+
+Local Hint Extern 1 (big_step (subst _ _ _) _ _ _) =>
+  progress simpl : core.
+
+Lemma ex1_works :
+  big_step ex1 NatMap.empty (ok true) NatMap.empty.
+Proof. eauto using big_step. Qed.
+Lemma ex2_works :
+  big_step ex2 NatMap.empty (ok false) NatMap.empty.
+Proof. eauto 6 using big_step. Qed.
+Lemma ex3_works :
+  big_step ex3 NatMap.empty (ok false) NatMap.empty.
+Proof. eauto 7 using big_step. Qed.
+Lemma ex4_works :
+  big_step ex4 NatMap.empty (ok true) NatMap.empty.
+Proof. eauto 7 using big_step. Qed.
+Lemma ex5_works :
+  big_step ex5 NatMap.empty (ok true) NatMap.empty.
+Proof. eauto 7 using big_step. Qed.
+Lemma ex6_works :
+  big_step ex6 NatMap.empty (ok 1) NatMap.empty.
+Proof. eauto 8 using big_step. Qed.
+Lemma ex7_works :
+  big_step ex7 NatMap.empty (ok 2) NatMap.empty.
+Proof. eauto 7 using big_step. Qed.
+Lemma ex8_works :
+  let l := @NatMap.fresh val NatMap.empty in
+  big_step ex8 NatMap.empty (ok 10) (NatMap.singleton l (VNat 10)).
+Proof. eauto 12 using big_step. Qed.
+Lemma ex9_works :
+  big_step ex9 NatMap.empty (ok 5) NatMap.empty.
+Proof. eauto 10 using big_step. Qed.
+
+(* ########################################################################## *)
+(** Verification of a recursive program and its client *)
+(* ########################################################################## *)
+
 Fixpoint alloc_list (l : list nat) : val :=
   closure: "_" =>
     match l with

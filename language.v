@@ -3,6 +3,7 @@ From stdpp Require Export base.
 Import NatMap.
 
 Inductive tag :=
+  | SomeException : tag
   | IllegalArgumentException : tag.
 Definition tag_dec (x y : tag) : {x = y} + {x <> y}.
 Proof. decide equality. Qed.
