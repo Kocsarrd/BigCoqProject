@@ -1,8 +1,8 @@
 From pv Require Import proofmode.
 
-Definition ty := val -> sepProp.
+Definition TEx (t : tag) (v : val) : sepProp := Ex n, @[ v = VNat n ].
 
-Definition TEx (t : tag) : ty := fun v => Ex n, @[ v = VNat n ].
+Definition ty := val -> sepProp.
 
 Definition TMoved : ty := fun v => EMP.
 Definition TUnit : ty := fun v => @[ v = VUnit ].
@@ -63,21 +63,24 @@ Fixpoint subst_map (vs : stringmap val) (e : expr) : expr :=
 Definition val_typed (v : val) (A : ty) : Prop :=
   EMP |~ abs (A v).
 
+Definition bin_op_typed (op : bin_op) (A1 A2 B : ty) : Prop :=
+  forall v1 v2,
+    A1 v1 ** A2 v2 |~ Ex v, @[ eval_bin_op op v1 v2 = Some v ] ** B v.
+
 Definition typed (Gamma : ty_ctx) (e : expr) (A : ty) : Prop :=
   forall vs, ctx_typed Gamma vs |~ wp (subst_map vs e) (abs1 A) (abs2 TEx).
 
 Definition copy (A : ty) : Prop :=
   forall v, A v |~ @[ EMP |~ A v ].
 
+Definition ctx_copy Gamma :=
+  forall vs, ctx_typed Gamma vs |~ @[ EMP |~ ctx_typed Gamma vs ].
+
 Definition subty (A1 A2 : ty) : Prop :=
   forall v, A1 v |~ abs (A2 v).
 
 Definition subctx (Gamma1 Gamma2 : ty_ctx) : Prop :=
   forall vs, ctx_typed Gamma1 vs |~ abs (ctx_typed Gamma2 vs).
-
-Definition bin_op_typed (op : bin_op) (A1 A2 B : ty) : Prop :=
-  forall v1 v2,
-    A1 v1 ** A2 v2 |~ Ex v, @[ eval_bin_op op v1 v2 = Some v ] ** B v.
 
 (* ########################################################################## *)
 (** * Helper lemmas and tactics *)
@@ -157,8 +160,6 @@ Proof.
   iIntros (v1 v2) "[[%b1 ->] [%b2 ->]]"; eauto.
 Qed.
 
-
-
 Lemma ctx_typed_app Gamma1 Gamma2 vs :
   ctx_typed (Gamma1 ++ Gamma2) vs |~
   ctx_typed Gamma1 vs ** ctx_typed Gamma2 vs.
@@ -179,6 +180,19 @@ Proof.
     rewrite StringMap.lookup_insert.
     destruct (String.eq_dec _ _) as [-> | ?]; tauto.
   - iApply ("IH" with "[%] Hvs"). tauto.
+Qed.
+
+Lemma all_copy_ctx_copy Gamma :
+  Forall (fun xA => copy (snd xA)) Gamma -> ctx_copy Gamma.
+Proof.
+  unfold ctx_copy; induction Gamma as [| [x A] Gamma]; simpl; intros HGamma.
+  { iIntros (vs) "_ !% _ //". }
+  iIntros (vs) "[(%v & % & Hv) Hvs]". inv HGamma.
+  iDestruct (H2 with "Hv") as "Hv"; iDestruct "Hv" as %Hv.
+  iDestruct (IHGamma with "Hvs") as "Hvs"; [done |].
+  iDestruct "Hvs" as %Hvs. iIntros "!% _"; iSplitL.
+  { iExists v; iSplitL; [done |]. by iApply Hv. }
+  by iApply Hvs.
 Qed.
 
 Ltac ex_done := iSplit; [| iIntros (??) "[??]"; by iFrame].
@@ -325,6 +339,22 @@ Proof.
   iApply He; simpl. iSplitL "Hv".
   { iExists v; iFrame; StringMap.map_solver. }
   by iApply ctx_typed_insert.
+Qed.
+
+Lemma Lam_copy_typed Gamma e x A1 A2 :
+  ~In x (ctx_dom Gamma) ->
+  Forall (fun xA => copy (snd xA)) Gamma ->
+  typed ((x, A1) :: Gamma) e A2 ->
+  typed Gamma (ELam x e) (TFun A1 A2).
+Proof.
+  iIntros (Hdom HGamma He vs) "Hvs"; simpl.
+  iDestruct (all_copy_ctx_copy with "Hvs") as "Hvs"; [done |].
+  iDestruct "Hvs" as %Hvs. iApply Lam_wp.
+  iSplitR; [| done]. iIntros "!% %w Hw".
+  iApply App_wp. rewrite <-subst_map_insert.
+  iApply He; simpl. iSplitL.
+  { iExists w; iFrame. iPureIntro; StringMap.map_solver. }
+  iApply ctx_typed_insert; [done |]. by iApply Hvs.
 Qed.
 
 Lemma App_typed Gamma1 Gamma2 e1 e2 A1 A2 :
@@ -556,6 +586,9 @@ Proof.
     by iApply ctx_typed_insert.
 Qed.
 
+(* ########################################################################## *)
+(** * Subtyping rules *)
+(* ########################################################################## *)
 
 Lemma subty_refl A :
   subty A A.
@@ -717,6 +750,10 @@ Proof.
   iApply (He with "Hvs"); ex_done; iIntros (v) "[Hv1 ?]".
   iDestruct (HA with "Hv1") as "[Hv1 ?]". iFrame.
 Qed.
+
+(* ########################################################################## *)
+(** * Type soundness *)
+(* ########################################################################## *)
 
 Definition terminates (e : expr) :Prop :=
   exists r h, big_step e NatMap.empty r h.
