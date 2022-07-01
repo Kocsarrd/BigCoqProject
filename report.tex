@@ -304,15 +304,70 @@ Lemma wp_adequacy Phi EPhi e :
 
 \section{Conclusion}
 
+In this project, we have formalized a syntax, operational semantics and program logic for a simple functional programming language
+with state and ML/Java-style exceptions, verified some example programs using our program logic, and proved a type soundness theorem
+via a semantic affine type system. We feel that we have been able to realize most of our original ideas about the project, and we are satisfied
+with our results.
+
+A nice feature which we have not been able to implement is the ability to throw exceptions of any type. The idea we had was to add syntactic types to the
+language and let \texttt{catch} indicate what type of exceptions it can handle (i.e. the argument type of its handler). Intuitively, then, the exceptional
+postcondition would have expressed that the exception is well-typed for some type \texttt{A}:
+\begin{lstlisting}
+Definition TEx (t : tag) (v : val) : sepProp := Ex A, sem A v.
+\end{lstlisting}
+where \texttt{sem : ty -> (val -> sepProp)} is the semantic interpretation of syntactic types. However, since \texttt{TEx} is itself used in the definition of
+\texttt{sem} for function types, this definition is not well-founded.
+
+A possible remedy for this issue could be to modify the typing judgment to contain information about the type(s) of possible exceptions. We did not attempt
+to implement such a typing system, however.
+
+Another thing we originally planned to do was to make the entire language parametric in the type of tags. Unfortunately, we needed to abandon this idea due
+to technical issues. At first, we placed the language definition inside a \texttt{Section} with a type \texttt{tag} of tags
+(together with a decision procedure \texttt{tag\_dec} for it) in the \texttt{Context}. However, it turned out that \texttt{Notation}-s defined in a \texttt{Section}
+cannot be imported by other files, which meant that it would have been necessary to redefine these notation in each file we planned to use the language
+(including e.g. \texttt{proofmode.v}).
+
+Furthermore, to use the language while keeping the tags a parameter, it would have been necessary to apply each definition in the language
+to the \texttt{tag} parameter, e. g.
+\begin{lstlisting}
+Definition ty := val tag -> sepProp (val tag).
+\end{lstlisting}
+Of course, it is possible to define notations like \texttt{Notation val := (val tag)}, but this is inconvenient and boilerplate code. We could not come up with
+an elegant solution to these issues.
+
+Ultimately, though, we attribute these issues to our limited knowledge of advanced Coq features. Otherwise, we enjoyed using Coq and Iris in this project, and
+have certainly learnt a lot of about Coq in the course.
+
 \section{Reflection}
+
+\subsection{Bálint Kocsis}
+
+My main contribution to this project consisted of the following:
+\begin{itemize}
+  \itemsep 0pt
+  \item proving the context rule for \texttt{wp}, including the two helper lemmas about the operational semantics,
+  \item writing and verifying the example programs in \texttt{programs.v},
+  \item setting up the framework for the semantic typing system, and
+  \item rounding up the report.
+\end{itemize}
+
+Of course, both of us were involved more or less in all important design decisions, such as the syntax and operational semantics of the language,
+the rules of the wp-calculus, the implementation of tagged exceptions, and the semantic typing system.
+
+Although there have been difficulties originating from our different working styles and schedules, I have found the collaboration on the project
+enjoyable and fruitful.
 
 \subsection{Márk Széles}
 
-The main design decisions (regarding syntax for tags and exceptions, big-step semantics, the separation logic and the type system) about our project are the result of our discussions.
+The main design decisions (regarding syntax for tags and exceptions, big-step semantics, the separation logic and the type system) about our project are the
+result of our discussions.
 
-I implemented the definitions of the syntax and big-step operational semantics of the language. I proved about half of the wp rules in \texttt{language.v} and the wp rules for derived constructs in \texttt{proofmode.v}.
+I implemented the definitions of the syntax and big-step operational semantics of the language. I proved about half of the wp rules in \texttt{language.v} and
+the wp rules for derived constructs in \texttt{proofmode.v}.
 
-After that I started to work on sem	antic typing. First, I tried to implement a linear type system to be able to prove a stronger type soundness theorem (which also states the absence of memory leaks). Since that was not possible we settled on the affine type system presented in this document. Using the tactics created by my partner I proved most lemmas in \texttt{affine\_semtype.v} (except for a few typing rules and the type soundness theorem). 
+After that I started to work on semantic typing. First, I tried to implement a linear type system to be able to prove a stronger type soundness theorem
+(which also states the absence of memory leaks). Since that was not possible we settled on the affine type system presented in this document.
+Using the tactics created by my partner I proved most lemmas in \texttt{affine\_semtype.v} (except for a few typing rules and the type soundness theorem).
 
 Moreover, I wrote the first draft for the report which we then proofread and extended/modified together.
 
