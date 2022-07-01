@@ -7,9 +7,10 @@
 \usepackage[a4paper, margin=2.5cm]{geometry}
 
 \usepackage{listings}
+\lstset{basicstyle=\small,
+	  xleftmargin=6pt}
 
-
-\title{Programming languages with exceptions}
+\title{A programming language with exceptions}
 \author{Bálint Kocsis \\ e-mail: \texttt{balint.kocsis@ru.nl} \\ student number: 1084447
 \and
 Márk Széles \\ e-mail: \texttt{mark.szeles@ru.nl} \\ student number: 1082002}
@@ -23,96 +24,112 @@ Márk Széles \\ e-mail: \texttt{mark.szeles@ru.nl} \\ student number: 1082002}
 
 \subsection{Summary of our project}
 
-The first goal of our project was to extend the language of \texttt{week9} with tagged exceptions. For this we fix a set \texttt{tag} of exception tags, and introduce the following constructs to our language:
+The first goal of our project was to extend the language of \texttt{week9} with tagged exceptions. For this we fixed a set \texttt{tag} of
+exception tags, and introduced the following constructs to our language:
 \begin{lstlisting}
-  EThrow : tag -> expr -> expr
-  ECatch : expr -> tag -> expr -> expr
+EThrow : tag -> expr -> expr
+ECatch : expr -> tag -> expr -> expr
 \end{lstlisting}
-The intuitive semantics is that \texttt{EThrow} throws an exception annotated with a tag and \texttt{ECatch} can catch exceptions with a given tag and apply the handler to the thrown value. A few examples:
-
+The intuitive semantics is that \texttt{EThrow} throws an exception annotated with a tag, and \texttt{ECatch} can catch exceptions with a
+given tag and apply the handler to the thrown value. A few examples:
 \begin{lstlisting}[mathescape]
-  catch (throw MyException 0) MyException ($\lambda$ e, e)
+catch (throw MyException 0) MyException ($\lambda$ e. e)
 \end{lstlisting}
-Since the tags match, \texttt{catch} catches the exception, and returns \texttt{0}.
+Since the tags match, \texttt{catch} catches the exception and returns \texttt{0}.
+\begin{lstlisting}[mathescape]
+let r := alloc 0 in
+catch (throw MyException 0; r <- 1) MyOtherException ($\lambda$ e. e)
+\end{lstlisting}
+This expression yields and exception as the tag of the thrown exception does not match the given tag in the \texttt{catch} expression.
+Also note that the assignment to \texttt{r} does not take place, so \texttt{r} still stores \texttt{0} after evaluation of the expression.
 
+We added a big-step operational semantics to the language, which is based on the big-step semantics of \texttt{week9.v} but extended
+to account for exceptional behaviour.
+
+Next, a wp-calculus was created for the language, again based on the one in \texttt{week9.v}. The definition of weakest precondition now
+also contains an exceptional postcondition \texttt{EPhi}.
 \begin{lstlisting}
-  catch (throw MyException 0) MyOtherException ($\lambda$ e, e)
+Definition wp (e : expr) (Phi : val -> sepProp)
+                         (EPhi : tag -> val -> sepProp) : sepProp.
 \end{lstlisting}
-This expression yields and exception, as the the thrown exception tag does not match with the given tag in the \texttt{catch} expression.
+Intuitively, \texttt{wp e Phi EPhi} expresses that the program \texttt{e} either returns with a value for which \texttt{Phi} holds, or throws a
+tagged exception for which \texttt{EPhi} holds.
 
-We then present a big-step operational semantics for the language which is based on the big-step semantics of the \texttt{week9}, but also describes exceptional behaviour.
+To gain some confidence in our definitions, a few example programs have been specified and verified.
 
-Next, a wp-calculus is created for the language. The definition of weakest precodition now also contains an exceptional postcondition \texttt{EPhi}.
-\begin{lstlisting}
-  Definition wp (e : expr) (Phi : val -> sepProp) 
-    (EPhi : tag -> val -> sepProp) : sepProp
-\end{lstlisting}
-Intuitively, the \texttt{wp} predicate expresses that the program \texttt{e} either returns with a value for which \texttt{Phi} holds or throws a tagged exception for which \texttt{EPhi} holds. 
-
-The \texttt{proofmode} file is extended, so we can use our rules with Iris. To gain some confidence in our definitions a few example programs are specified and verified in the file \texttt{programs.v}
-
-Finally, a linear type system is introduced for the language which is used the prove the type soundness theorem: a well-typed program never gets stuck. INSERT THEOREM HERE, POSSIBLY MENTION MEMORY LEAKS.
+Finally, a linear type system similar to the one in \texttt{week11.v} has been introduced for the language which was used to the
+prove a type soundness theorem: a well-typed program never gets stuck.
 
 \subsection{Project structure}
 
-Our project relies on the basic definitions and theorems in \texttt{week8.v}. The exceptional language is defined in \texttt{language.v}. In the same file, we define \texttt{wp} and prove the \texttt{wp} rules for each language constructor.
+Our project relies on the basic definitions and theorems of separation logic in \texttt{week8.v} (and hence, by transitivity, on \texttt{library.v}).
+The language is defined in \texttt{language.v}. In the same file, we define \texttt{wp} and prove the quintessential rules of the wp-logic.
 
-\texttt{proofmode.v} sets up the Iris proofmode (with the recommended modifications in the project description). It also contains defined language constructs (let, sum, pair, let, linear load) and the derived \texttt{wp} rules for these constructs, and also some necessary lemmas about substitution. Finally, we also defined language notation in this file.
+The file \texttt{proofmode.v} sets up the Iris proofmode (with the recommended modifications in the project description). It also contains some
+helper lemmas and useful derived \texttt{wp} rules, as well as defined language constructs (let, sums, let-pair, linear load)
+along with their derived \texttt{wp} rules. Additionally, nice notations for the embedded language are defined in this file.
 
-A few example programs are verified in \texttt{programs.v} using the separation logic for the language.
+A few example programs can be found in \texttt{programs.v}.  At the top of the file, the examples given in the project description
+are checked against the big step semantics to confirm that they produce the expected vaue. After that, a recursive program \texttt{dec\_list} is
+specified and verified using our customized wp-logic.
 
-\texttt{affine\_semtype.v} contains the semantic typing system for the language and the proof of the type soundness theorem.
+Finally, \texttt{affine\_semtype.v} contains the shallow embedding of a semantic typing system for the language and the proof of the type soundness theorem.
 
 \section{Language definition and big-step semantics}
 
 \subsection{Syntax}
 
-The syntax for our language is the same as the one in \texttt{week9}, extended with constructors for \texttt{throw} and \texttt{catch}.
+The syntax for our language is the same as the one in \texttt{week9.v}, extended with constructors for \texttt{throw} and \texttt{catch}.
 \begin{lstlisting}
-  EThrow : tag -> expr -> expr
-  ECatch : expr -> tag -> expr -> expr
+EThrow : tag -> expr -> expr
+ECatch : expr -> tag -> expr -> expr
 \end{lstlisting}
-We did not include syntactic constructs for linear load, the let-pair construct, and constructors and eliminator for sum types.
-These are encoded in the same way as we have seen in \texttt{week9} and \texttt{week11}.
+We did not include let-expressions, sum types, the let-pair constructor and linear load in our syntax. Instead, these are encoded in the same way as we have
+seen in \texttt{week9.v} and \texttt{week11.v} (see \texttt{proofmode.v}).
 
 \subsection{Big-step operational semantics}
 
 The \texttt{subst} and \texttt{eval\_bin\_op} functions are defined as usual. 
 
-Since programs now may result in an exception, the type of \texttt{big\_step} had to be modified. We introduced a type \texttt{result} representing the possible results of a program: it either terminates with a value or a tagged expression.
+Since programs may now result in an exception, the type of \texttt{big\_step} had to be modified. We introduced a type \texttt{res} representing the possible
+outcomes of a program: either an ordinary return value or a tagged exception.
 \begin{lstlisting}
-  Inductive res :=
+Inductive res :=
   | ok : val -> res
   | ex : tag -> val -> res.
 \end{lstlisting}
-The type of \texttt{big\_step} now becomes
+The type of \texttt{big\_step} has thus become
 \begin{lstlisting}
-  Inductive big_step : expr -> heap -> res -> heap -> Prop
-\end{lstlisting}
-The rules for the existing constructs in \texttt{week9} remained the same, modulo rewriting the \texttt{val}s to \texttt{res}-s. New rules also had to be introduced to propagate exceptions. These rules are straightforward to derive. As an example here are the exceptional rules for operators:
+Inductive big_step : expr -> heap -> res -> heap -> Prop
+\end{lstlisting}	
+
+The rules for the existing constructs in \texttt{week9.v} remained the same, modulo replacing the \texttt{val}-s with \texttt{res}-s. However, new rules had to be
+introduced to propagate exceptions. These rules are rather straightforward: if a subexpression throws an exception, then the whole expression
+throws the same exception. As an example, here are the rules for operators:
 \begin{lstlisting}
-  | Op_big_step_ex_l h1 h2 e1 e2 op t v1 :
+  | Op_big_step_ex_l h1 h2 op e1 e2 t v1 :
       big_step e1 h1 (ex t v1) h2 ->
       big_step (EOp op e1 e2) h1 (ex t v1) h2
-  | Op_big_step_ex_r h1 h2 h3 e1 e2 op t v1 v2 :
+  | Op_big_step_ex_r h1 h2 h3 op e1 e2 t v1 v2 :
       big_step e1 h1 (ok v1) h2 ->
       big_step e2 h2 (ex t v2) h3 ->
       big_step (EOp op e1 e2) h1 (ex t v2) h3
 \end{lstlisting}
-
-The rule for throw is also intuitive: if the expression parameter terminates in a value, then that value is thrown.
+The rule for throw is also intuitive: if the expression parameter terminates in a value, then that value is thrown along with the given tag.
 \begin{lstlisting}
   | Throw_big_step h1 h2 t e v :
       big_step e h1 (ok v) h2 ->
       big_step (EThrow t e) h1 (ex t v) h2
 \end{lstlisting}
-For catch there are three rules. One for the case when the guarded program terminates with a value:
+If the subexpression already throws an exception, then that exception is rethrown.
+
+For catch there are three rules. The first is for the case when the guarded program (left argument) returns successfully:
 \begin{lstlisting}
   | Catch_big_step h1 h2 e1 e2 t v1 :
-       big_step e1 h1 (ok v1) h2 ->
-       big_step (ECatch e1 t e2) h1 (ok v1) h2
+      big_step e1 h1 (ok v1) h2 ->
+      big_step (ECatch e1 t e2) h1 (ok v1) h2
 \end{lstlisting}
-There are two cases when the guarded program throws an exception, as \texttt{catch}  has to check for equality of tags:
+The other two are for when the guarded program throws an exception. One rule is not enough as we need to check for equality of tags:
 \begin{lstlisting}
   | Catch_big_step_ex_1 h1 h2 h3 e1 e2 t v1 r :
       big_step e1 h1 (ex t v1) h2 ->
@@ -121,125 +138,168 @@ There are two cases when the guarded program throws an exception, as \texttt{cat
   | Catch_big_step_ex_2 h1 h2 e1 e2 t t' v1 :
       big_step e1 h1 (ex t' v1) h2 ->
       t <> t' ->
-      big_step (ECatch e1 t e2) h1 (ex t' v1) h2.
+      big_step (ECatch e1 t e2) h1 (ex t' v1) h2
 \end{lstlisting}
+Note that the rule \texttt{Catch\_big\_step\_ex\_1} describes both when \texttt{e2} returns successfully or with an exception. A similar compactness is achieved
+in some other cases (e.g. \texttt{If\_true\_big\_step}).
 
-Note that the second rule describes both when \texttt{e2} returns with a value and when it throws an exception. A similar compactness is achieved in other cases (e.g. \texttt{If\_true\_big\_step}). Had we chosen to describe the big-step operational semantics with mutually inductive predicates \texttt{big\_step} and \texttt{big\_step\_error}, we would have ended up with more rules. 
+An alternative solution we had thought of would be to define the big-step operational semantics in terms of two mutually inductive predicates \texttt{big\_step}
+and \texttt{big\_step\_error} for ordinary and exceptional returns, respectively. Although this might lead to more convenient notation paper,
+it would result in more rules for the operational semantics. For example, the rule \texttt{Catch\_big\_step\_ex\_1} would need to be split into two cases
+depending on whether the handler throws an exception or not.
 
-A mutual inductive definition also makes it a bit more inconvenient to do induction on the operational semantics, as the programmer has to look out for well-foundedness when using induction hypotheses. (In this project, this would not have been a big problem, but it is worth considering when designing the operational semantics.)
+Furthermore, this approach would make it a bit more inconvenient to do induction on the operational semantics in Coq, as the programmer has to look out for
+well-foundedness when using induction hypotheses. (In this project, this would not have been a big problem, but it is worth noting.)
 
 \section{Separation logic}
 
-The definition of weakest precondition now involves an exceptional postcondition. Intuitively, \texttt{wp e Phi EPhi} holds if either \texttt{e} terminates with an \texttt{ok vret}, and the separation logic proposition \texttt{Phi} holds for \texttt{vret} or if \texttt{e} throws an exception \texttt{ex tag vexcept} and \texttt{EPhi} holds for \texttt{tag} and \texttt{vexcept}. This is made precise with the following definition:
+The definition of weakest precondition now involves an exceptional postcondition. Intuitively, \texttt{wp e Phi EPhi} holds if either \texttt{e} terminates
+successfully with \texttt{ok vret} and \texttt{Phi vret} holds, or if \texttt{e} throws an exception \texttt{ex t vex} and \texttt{EPhi t vex} holds.
+This is made precise with the following definition:
 \begin{lstlisting}
-  Definition wp (e : expr) (Phi : val -> sepProp)
-                           (EPhi : tag -> val -> sepProp) : sepProp := fun h =>
-    forall hf, disjoint h hf ->
-      exists r h',
-        disjoint h' hf /\
-        big_step e (union h hf) r (union h' hf) /\
-        (Phi # EPhi) r h'.
+Definition wp (e : expr) (Phi : val -> sepProp)
+                         (EPhi : tag -> val -> sepProp) : sepProp := fun h =>
+  forall hf, disjoint h hf ->
+    exists r h',
+      disjoint h' hf /\
+      big_step e (union h hf) r (union h' hf) /\
+      (Phi # EPhi) r h'.
 \end{lstlisting}
-where \texttt{\#} is notation for combining \texttt{Phi} and \texttt{EPhi} into a \texttt{res -> sepProp}.
+where \texttt{Phi \# EPhi} is notation for combining \texttt{Phi} and \texttt{EPhi} into a \texttt{res -> sepProp}.
 
-Using this definition we proved the wp rules for all language constructs. In some cases it is known that a program always correctly terminates or always throws an exception. In these cases one of the postconditions can be arbitrary. For example the rules for values and \texttt{throw} are stated as
+Using this definition, we proved the wp rules for all language constructs. In some cases, it is known that a program always correctly terminates or
+always throws an exception. In such situations, one of the postconditions can be arbitrary. For example, the rules for values and \texttt{throw} are stated as
 \begin{lstlisting}
-  Lemma Val_wp Phi EPhi v :
-    Phi v |~ wp (EVal v) Phi EPhi.
-  
-  Lemma Throw_wp Phi EPhi t e :
-    wp e (EPhi t) EPhi |~ wp (EThrow t e) Phi EPhi.
+Lemma Val_wp Phi EPhi v :
+  Phi v |- wp (EVal v) Phi EPhi.
+
+Lemma Throw_wp Phi EPhi t e :
+  wp e (EPhi t) EPhi |- wp (EThrow t e) Phi EPhi.
 \end{lstlisting}
-Another interesting case is the rule for \texttt{catch} where we have to use the fact that equality of tags is decidable.
+Another interesting case is the rule for \texttt{catch}, where we had to use the fact that equality of tags is decidable.
 \begin{lstlisting}
-  Lemma Catch_wp Phi EPhi e1 t e2 :
-    wp e1 Phi (fun t' v1 => if tag_dec t t'
-                              then wp (EApp e2 (EVal v1)) Phi EPhi
-                              else EPhi t' v1) |~
-    wp (ECatch e1 t e2) Phi EPhi.
+Lemma Catch_wp Phi EPhi e1 t e2 :
+  wp e1 Phi (fun t' v1 => if tag_dec t t'
+                            then wp (EApp e2 (EVal v1)) Phi EPhi
+                            else EPhi t' v1) |-
+  wp (ECatch e1 t e2) Phi EPhi.
 \end{lstlisting}
 
-The most complicated rule to prove is again the context rule. Recall that in \texttt{week9} an auxiliary lemma \texttt{big\_step\_ctx} was proven to decompose a statement of the form \texttt{big\_step (k e) h1 v3 h3} to two steps: first evaluating \texttt{e} to \texttt{v2} and then putting \texttt{v2} in the context, and evaluate it. For our exceptional language we also need a slightly modified version of this lemma to deal with goals and assumptions of the form \texttt{big\_step (k e) h1 (ok v3) h3}. 
+The most complicated rule to prove was the context rule. Recall that in \texttt{week9.v}, an auxiliary lemma \texttt{big\_step\_ctx} had been used to
+decompose a statement of the form \texttt{big\_step (k e) h1 v3 h3} to two steps: first evaluating \texttt{e} to \texttt{v2}, then evaluting \texttt{k v2} to
+\texttt{v3}. For our exceptional language, we need a slightly modified version of this lemma to deal with goals and assumptions of the form
+\texttt{big\_step (k e) h1 (ok v3) h3}. 
 
-Moreover, we also have to deal with cases when evaluating an expression \texttt{k e} results in an exception. This can happen in two cases: either \texttt{e} throws the exception or \texttt{e} evaluates to a value \texttt{v2}, and evaluating \texttt{k v2} raises the exception. This observation is made precise by the lemma \texttt{big\_step\_ctx\_ex}.
+Moreover, we also have to take into account the case when evaluating an expression \texttt{k e} results in an exception. This can happen in two ways:
+either \texttt{e} throws the exception, or \texttt{e} evaluates to a value \texttt{v2} and evaluating \texttt{k v2} raises the exception. This observation is made
+precise by the lemma \texttt{big\_step\_ctx\_ex}.
 \begin{lstlisting}
-  Lemma big_step_ctx_ex k e t v3 h1 h3 :
-    ctx k ->
-    big_step (k e) h1 (ex t v3) h3 <->
-      big_step e h1 (ex t v3) h3 \/
-        exists v2 h2,
-         big_step e h1 (ok v2) h2 /\
-         big_step (k (EVal v2)) h2 (ex t v3) h3.
+Lemma big_step_ctx_ex k e t v3 h1 h3 :
+  ctx k ->
+  big_step (k e) h1 (ex t v3) h3 <->
+    big_step e h1 (ex t v3) h3 \/
+      exists v2 h2,
+       big_step e h1 (ok v2) h2 /\
+       big_step (k (EVal v2)) h2 (ex t v3) h3.
 \end{lstlisting}
 
 \section{Semantic typing}
 
-In this section we introduce a semantic typing system for the exceptional language and prove the type soundness theorem. It states that a well-typed program never gets stuck, it either returns with a value or throws an exception.
+In this section we present a semantic typing system for our language with exceptions and a proof of a type soundness theorem. It states that
+a well-typed program never gets stuck: it either returns with a value or throws an exception.
 \begin{lstlisting}
-  Definition terminates (e : expr) :Prop :=
-    exists r h, big_step e NatMap.empty r h.
-  
-  Theorem type_soundness e A :
-    typed [] e A ->
-    terminates e.
-\end{lstlisting}
-Comparing this formulation to the type soundness theorem in \texttt{week9} there is a fundamental difference: we allow the program \texttt{e} to leak memory. Since well-typed programs may leak memory anyway, there is also no need to restrict \texttt{A} to be \texttt{copy}.
+Definition terminates (e : expr) : Prop :=
+  exists r h, big_step e NatMap.empty r h.
 
-The presence of memory leaks is a consequence of the error propagation mechanism. We look at an example program to see the problem.
-\begin{lstlisting}
-  let x = alloc 0 in
-  throw 42 + free x.
+Theorem type_soundness e A :
+  typed [] e A ->
+  terminates e.
 \end{lstlisting}
-This program uses every variable exactly once, but still leaks memory, since after evaluating the left operand the expression \texttt{free x} will never evaluate. Control is given back to the caller, \texttt{x} goes out of scope, but its content remains on the heap.
+Comparing this formulation to the type soundness theorem in \texttt{week9.v} there is a fundamental difference: we allow the program \texttt{e} to leak
+memory. Since well-typed programs may leak memory anyway, there is also no need to restrict \texttt{A} to be \texttt{copy}.
 
-This shows that a linear type system is too restrictive for the exceptional language. Instead we introduce an affine type system, which still prevents use-after-free bugs and is sufficient to prove the version of the type soundess theorem formulated at the beginning of this section.
+The presence of memory leaks is a consequence of the error propagation mechanism. Let us look at an example program to see the problem.
+\begin{lstlisting}
+let x = alloc 0 in
+throw 42 + free x.
+\end{lstlisting}
+This program uses every variable exactly once, but still leaks memory: after evaluating the left operand of the addition, \texttt{free x} will never be executed.
+Control is given back to the caller, causing \texttt{x} to go out of scope, with its content remaining on the heap without any references to it.
 
-To ease notation, we introduced the predicate transformer \texttt{abs} which allows an arbitrary disjoint heap next to the part on which the propositon holds.
-\begin{lstlisting}
-  Definition abs (P : sepProp) : sepProp := P ** TRUE.
-\end{lstlisting}
-For one and two parameter predicates, transformers \texttt{abs1} and \texttt{abs2} were defined in a similar manner.
+This shows that a linear type system is too restrictive for our language. Instead we used an affine type system, which still prevents use-after-free bugs, and
+is sufficient to prove the version of the type soundess theorem formulated at the beginning of this section.
 
-Now, we define the semantics of types. Similar to \texttt{week11} we have
+To ease notation and streamline our proofs, we defined the notion of an \textit{absorbing} proposition.
 \begin{lstlisting}
-  Definition ty := val -> sepProp.
+Definition absorbing (P : sepProp) : Prop := P ** TRUE |- P.
 \end{lstlisting}
-To make our lives easier, we only allow expressions of type \texttt{nat} to be thrown as exceptions. Hence, we define the type of thrown exceptions to be
-\begin{lstlisting}
-  Definition TEx (t : tag) : ty := fun v => Ex n, @[ v = VNat n ].
-\end{lstlisting}
-The semantics of all but function types remains the same as in \texttt{week11}. For function types we allow some junk on the heap in the \texttt{wp} postconditions:
-\begin{lstlisting}
-  Definition TFun (A1 A2 : ty) : ty := fun v =>
-    @[ forall w, A1 w |~ wp (EApp (EVal v) (EVal w)) (abs1 A2) (abs2 TEx) ].
-  Definition TFunOnce (A1 A2 : ty) : ty := fun v =>
-    All w, A1 w -** wp (EApp (EVal v) (EVal w)) (abs1 A2) (abs2 TEx).
-\end{lstlisting}
-The semantic typing judgments \texttt{val\_typed} and  \texttt{typed} also allow for memory leaks.
-\begin{lstlisting}
-  Definition val_typed (v : val) (A : ty) : Prop :=
-    EMP |~ abs (A v).
-  
-  Definition typed (Gamma : ty_ctx) (e : expr) (A : ty) : Prop :=
-    forall vs, ctx_typed Gamma vs |~ wp (subst_map vs e) (abs1 A) (abs2 TEx).
-\end{lstlisting}
-This is also necessary in case of \texttt{val\_typed} to be able to prove the typing rule of closures.
+Intuitively, \texttt{absoring P} expresses that we can freely give up any resources on the heap while proving \texttt{P}.
 
-The definition of subtyping and subcontext also changes to account for memory leaks.
+With this abstraction at hand, we are ready to prove some basic properties about absorbing propositions. For instance, we can define
+the function \texttt{abs} which turns any proposition \texttt{P} to an absorbing proposition:
 \begin{lstlisting}
-  Definition subty (A1 A2 : ty) : Prop :=
-    forall v, A1 v |~ abs (A2 v).
-  
-  Definition subctx (Gamma1 Gamma2 : ty_ctx) : Prop :=
-    forall vs, ctx_typed Gamma1 vs |~ abs (ctx_typed Gamma2 vs).
-\end{lstlisting}
-Using these definitions it is possible the prove a general \texttt{subctx\_weakening} lemma (for non-copy types as well) and that every type is a subtype of \texttt{moved}.
+Definition abs (P : sepProp) : sepProp := P ** TRUE.
 
-Finally, type soundess follows from the \texttt{wp\_adequacy} theorem, which is similar to the one in \texttt{week11}, but contains the exceptional postcondition and allows for memory leaks.
+Lemma abs_absorbing P :
+  absorbing (abs P).
+\end{lstlisting}
+(Remark: \texttt{abs P} is the least specific absorbing proposition implied by \texttt{P}.)
+For one and two parameter predicates, the transformers \texttt{abs1} and \texttt{abs2} were defined in a similar manner.
+
+A crucial property of being absorbing is that it is preserved under weakest preconditions:
 \begin{lstlisting}
-  Lemma wp_adequacy Phi EPhi e :
-    (EMP |~ wp e Phi EPhi) ->
-    exists r h, big_step e NatMap.empty r h /\ (Phi # EPhi) r h.
+Lemma wp_absorbing Phi EPhi e :
+  (forall v, absorbing (Phi v)) ->
+  (forall t v, absorbing (EPhi t v)) ->
+  absorbing (wp e Phi EPhi).
+\end{lstlisting}
+This makes it possible to throw away resources when proving weakest preconditions. To make our proofs nicer, we defined a tactic \texttt{wp\_absorb}
+which can absorb a set of spatial hypotheses when the goal is a \texttt{wp}. For an example of how these concepts are used in practice,
+see the proof of one of the binary typing rules (e.g. \texttt{App\_typed}).
+
+The actual semantics of types is similar to the one in \texttt{week11.v}. There are two essential differences:
+\begin{itemize}
+  \itemsep 0pt
+  \item the presence of the exceptional postcondition in all \texttt{wp}-s
+  \item making the postconditions absorbing, which in effect allows memory leaks to happen.
+\end{itemize}
+
+To make our lives easier, we only allow expressions of type \texttt{Nat} to be thrown as exceptions. Hence, we define the exceptional postcondition to be
+\begin{lstlisting}
+Definition TEx (t : tag) (v : val) : sepProp := Ex n, @[ v = VNat n ].
+\end{lstlisting}
+The semantics of all but function types remains the same as in \texttt{week11.v}. The semantics of function types needs to be changed mildly
+to make the postconditions absorbing:
+\begin{lstlisting}
+Definition TFun (A1 A2 : ty) : ty := fun v =>
+  @[ forall w, A1 w |- wp (EApp (EVal v) (EVal w)) (abs1 A2) (abs2 TEx) ].
+Definition TFunOnce (A1 A2 : ty) : ty := fun v =>
+  All w, A1 w -** wp (EApp (EVal v) (EVal w)) (abs1 A2) (abs2 TEx).
+\end{lstlisting}
+The situation is similar in the definition of the semantic typing judgment:
+\begin{lstlisting}
+Definition typed (Gamma : ty_ctx) (e : expr) (A : ty) : Prop :=
+  forall vs, ctx_typed Gamma vs |- wp (subst_map vs e) (abs1 A) (abs2 TEx).
+\end{lstlisting}
+
+Analogously, the right hand side of some entailments were also needed to be made absorbing. As an example, this was the case for the definition
+of subtyping (including subcontexts).
+\begin{lstlisting}
+Definition subty (A1 A2 : ty) : Prop :=
+  forall v, A1 v |- abs (A2 v).
+
+Definition subctx (Gamma1 Gamma2 : ty_ctx) : Prop :=
+  forall vs, ctx_typed Gamma1 vs |- abs (ctx_typed Gamma2 vs).
+\end{lstlisting}
+Using these definitions made it possible the prove a general \texttt{subctx\_weakening} lemma (for non-copy types as well),
+and that every type is a subtype of \texttt{Moved}.
+
+Finally, type soundess follows from the \texttt{wp\_adequacy} theorem, which is similar to the one in \texttt{week11.v},
+but contains the exceptional postcondition and allows for memory leaks.
+\begin{lstlisting}
+Lemma wp_adequacy Phi EPhi e :
+  (EMP |- wp e Phi EPhi) ->
+  exists r h, big_step e NatMap.empty r h /\ (Phi # EPhi) r h.
 \end{lstlisting}
 
 \section{Conclusion}
