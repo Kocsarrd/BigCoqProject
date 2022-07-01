@@ -40,7 +40,7 @@ Since the tags match, \texttt{catch} catches the exception and returns \texttt{0
 let r := alloc 0 in
 catch (throw MyException 0; r <- 1) MyOtherException ($\lambda$ e. e)
 \end{lstlisting}
-This expression yields and exception as the tag of the thrown exception does not match the given tag in the \texttt{catch} expression.
+This expression yields an exception as the tag of the thrown exception does not match the given tag in the \texttt{catch} expression.
 Also note that the assignment to \texttt{r} does not take place, so \texttt{r} still stores \texttt{0} after evaluation of the expression.
 
 We added a big-step operational semantics to the language, which is based on the big-step semantics of \texttt{week9.v} but extended
@@ -57,7 +57,7 @@ tagged exception for which \texttt{EPhi} holds.
 
 To gain some confidence in our definitions, a few example programs have been specified and verified.
 
-Finally, a linear type system similar to the one in \texttt{week11.v} has been introduced for the language which was used to the
+Finally, a semantic type system similar to the one in \texttt{week11.v} has been introduced for the language which was used to the
 prove a type soundness theorem: a well-typed program never gets stuck.
 
 \subsection{Project structure}
@@ -144,7 +144,7 @@ Note that the rule \texttt{Catch\_big\_step\_ex\_1} describes both when \texttt{
 in some other cases (e.g. \texttt{If\_true\_big\_step}).
 
 An alternative solution we had thought of would be to define the big-step operational semantics in terms of two mutually inductive predicates \texttt{big\_step}
-and \texttt{big\_step\_error} for ordinary and exceptional returns, respectively. Although this might lead to more convenient notation paper,
+and \texttt{big\_step\_error} for ordinary and exceptional returns, respectively. Although this might lead to more convenient notation on paper,
 it would result in more rules for the operational semantics. For example, the rule \texttt{Catch\_big\_step\_ex\_1} would need to be split into two cases
 depending on whether the handler throws an exception or not.
 
