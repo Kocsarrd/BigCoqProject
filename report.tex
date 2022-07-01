@@ -246,5 +246,17 @@ Finally, type soundess follows from the \texttt{wp\_adequacy} theorem, which is 
 
 \section{Reflection}
 
+\subsection{Márk Széles}
+
+The main design decisions (regarding syntax for tags and exceptions, big-step semantics, the separation logic and the type system) about our project are the result of our discussions.
+
+I implemented the definitions of the syntax and big-step operational semantics of the language. I proved about half of the wp rules in \texttt{language.v} and the wp rules for derived constructs in \texttt{proofmode.v}.
+
+After that I started to work on sem	antic typing. First, I tried to implement a linear type system to be able to prove a stronger type soundness theorem (which also states the absence of memory leaks). Since that was not possible we settled on the affine type system presented in this document. Using the tactics created by my partner I proved most lemmas in \texttt{affine\_semtype.v} (except for a few typing rules and the type soundness theorem). 
+
+Moreover, I wrote the first draft for the report which we then proofread and extended/modified together.
+
+Overall, I would say the collaboration was good, we discussed many interesting ideas, especially about the semantic typing system.
+
 \end{document}
 

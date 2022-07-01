@@ -1,10 +1,21 @@
+(** THIS FILE CONTAINS: *) 
+(** the language definition *) 
+(** the big-step operational semantics *)
+(** the separation logic for the language *)
+
 From pv Require Export week8.
 From stdpp Require Export base.
 Import NatMap.
 
+(* The type of possible exception tags *)
+(* Could be an arbitrary type with a function tag_dec *)
+(* First, we wanted to parametrize the files by the tag type,
+   but ran into some technical difficulties. *)
 Inductive tag :=
   | SomeException : tag
   | IllegalArgumentException : tag.
+
+(* Equality of tags must be decidable *)
 Definition tag_dec (x y : tag) : {x = y} + {x <> y}.
 Proof. decide equality. Qed.
 Lemma tag_dec_eq {B} (y1 y2 : B) x :
@@ -34,7 +45,11 @@ Inductive expr :=
   | ELoad : expr -> expr
   | EStore : expr -> expr -> expr
   | EFree : expr -> expr
+  (* NEW: throws a tagged expression *)
   | EThrow : tag -> expr -> expr
+  (* NEW: catches exceptions thrown by the first expression
+          parameter with the given tag and applies the handler
+          (third parameter to the thrown value *)
   | ECatch : expr -> tag -> expr -> expr
 with val :=
   | VClosure : string -> expr -> val
@@ -82,10 +97,18 @@ Definition eval_bin_op (op : bin_op) (v1 v2 : val) : option val :=
 
 Notation heap := (natmap val).
 
+(* Possible results of evaluating a program *)
 Inductive res :=
   | ok : val -> res
   | ex : tag -> val -> res.
 
+(* The big_step operational semantics *)
+(* big_step e h (ok v) h' 
+   <-> e terminates with value v without throwing an exception.
+       h is the starting heap, h' is the final heap *)
+(* big_step e h (ex t v) h' 
+   e throws an exception with tag t and value v.
+       h is the starting heap, h' is the final heap *)
 Inductive big_step : expr -> heap -> res -> heap -> Prop :=
   | Val_big_step h v :
       big_step (EVal v) h (ok v) h
@@ -237,6 +260,7 @@ Notation sepProp := (sepProp val).
 Notation "P # Q" := (res_rect (fun _ => _) P Q)
   (at level 10, no associativity).
 
+(* EPhi is the exceptional postcondition *)
 Definition wp (e : expr) (Phi : val -> sepProp)
                          (EPhi : tag -> val -> sepProp) : sepProp := fun h =>
   forall hf, disjoint h hf ->
@@ -282,6 +306,7 @@ Global Hint Extern 0 (TCEq _ _) =>
 Global Hint Extern 0 (disjoint _ _) =>
   apply disjoint_comm; assumption : core.
 
+(* Needed for the context rule, similar to big_step_ctx in week11 *)
 Lemma big_step_ctx_ok k e v3 h1 h3 :
   ctx k ->
   big_step (k e) h1 (ok v3) h3 <->
@@ -299,6 +324,8 @@ Proof.
     do 2 eexists; split; [| done]. apply IHHk2. eauto.
 Qed.
 
+(* Needed for the context rule for similar reasons as big_step_ctx_ok, 
+   but this lemma tackles cases when the program (k e) big steps to an exception *)
 Lemma big_step_ctx_ex k e t v3 h1 h3 :
   ctx k ->
   big_step (k e) h1 (ex t v3) h3 <->
@@ -332,6 +359,8 @@ Proof.
   destruct r as [v | t v]; simpl in *; [by apply H1 | by apply H2].
 Qed.
 
+(* In the frame rule the separation logic proposition R also goes into 
+   the exceptional postcondition *)
 Lemma wp_frame Phi EPhi e R :
   wp e Phi EPhi ** R |~ wp e (fun v => Phi v ** R) (fun t v => EPhi t v ** R).
 Proof.
@@ -362,6 +391,8 @@ Proof.
     apply big_step_ctx_ex; eauto.
 Qed.
 
+(* Since a value always terminates without an exception, 
+   the exceptional postcondition can be an arbitrary proposition *)
 Lemma Val_wp Phi EPhi v :
   Phi v |~ wp (EVal v) Phi EPhi.
 Proof.

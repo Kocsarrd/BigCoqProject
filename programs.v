@@ -1,3 +1,8 @@
+(** THIS FILE CONTAINS: *) 
+(** The verification of the example programs from the project description *)
+(** The verification of a recursive program possibly throwing an exception 
+    and a client using this program *)
+
 From pv Require Import language.
 From pv Require Import proofmode.
 Import language_notation hoare_notation.

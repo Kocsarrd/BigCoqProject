@@ -1,5 +1,11 @@
+(** THIS FILE CONTAINS: *)
+(** the definition of semantic types *) 
+(** the semantic typing rules *)
+(** the separation logic for the language *)
+
 From pv Require Import proofmode.
 
+(* Exceptions are natural numbers *)
 Definition TEx (t : tag) (v : val) : sepProp := Ex n, @[ v = VNat n ].
 
 Definition ty := val -> sepProp.
@@ -17,6 +23,8 @@ Definition TProd (A1 A2 : ty) : ty := fun v =>
 Definition TSum (A1 A2 : ty) : ty := fun v =>
   Ex w, (@[ v = VInjL w ] ** A1 w) \// (@[ v = VInjR w] ** A2 w).
 
+(* RECALL: (abs1 A) expands to (fun v => A v ** TRUE) *)
+(* Similarily (abs2 A) expands to (fun t v => A t v ** TRUE) *) 
 Definition TFun (A1 A2 : ty) : ty := fun v =>
   @[ forall w, A1 w |~ wp (EApp (EVal v) (EVal w)) (abs1 A2) (abs2 TEx) ].
 Definition TFunOnce (A1 A2 : ty) : ty := fun v =>
@@ -60,6 +68,7 @@ Fixpoint subst_map (vs : stringmap val) (e : expr) : expr :=
   | ECatch e1 t e2 => ECatch (subst_map vs e1) t (subst_map vs e2)
   end.
 
+(* Recall: abs (A v) expands to (A v ** TRUE) *)
 Definition val_typed (v : val) (A : ty) : Prop :=
   EMP |~ abs (A v).
 
@@ -195,9 +204,21 @@ Proof.
   by iApply Hvs.
 Qed.
 
+(* 
+   When proving the typing rules, we often have goals of the shape
+   P /\\ (All (t : tag) (ve : val), abs2 TEx t ve -** abs2 TEx t ve)
+   The right conjunct is the case for the exceptional postcondition.
+   The tactic 'ex_done' proves the right conjuct, and transforms the goal to P 
+*) 
 Ltac ex_done := iSplit; [| iIntros (??) "[??]"; by iFrame].
+
+(*
+  Since typed programs are allowed to leak resources, in the proofs we often 
+  have to absorb assumptions into the ( ** TRUE) part of the postcondition.
+  wp_absorb takes care of this.
+*)
 Tactic Notation "wp_absorb" constr(spat) :=
-  iApply (absorb with spat);
+  iApply (absorb with spat);  
     [apply wp_absorbing; intros; apply abs_absorbing | done |].
 
 (* ########################################################################## *)
@@ -606,6 +627,7 @@ Proof.
   iDestruct (HA23 with "Hv") as "[Hv ?]". iFrame.
 Qed.
 
+(* Every type is a subtype of moved *)
 Lemma subty_moved A :
   subty A TMoved.
 Proof.
@@ -712,6 +734,7 @@ Proof.
   iFrame; iSplitL "Hv2"; eauto.
 Qed.
 
+(* The typing system is affine: weakening holds for arbitrary A *)
 Lemma subctx_weakening Gamma x A :
   subctx ((x, A) :: Gamma) Gamma.
 Proof.
